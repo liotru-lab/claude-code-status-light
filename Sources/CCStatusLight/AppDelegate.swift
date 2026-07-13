@@ -70,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "CC Status Light"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 420, height: 460))
+        window.contentMinSize = NSSize(width: 200, height: 200)   // allow narrow resize
         window.isReleasedWhenClosed = false   // keep the instance for reopen
         window.setFrameAutosaveName("MainWindow")
         window.center()

@@ -31,7 +31,7 @@ struct ContentView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 360, minHeight: 300)
+        .frame(minWidth: 200, minHeight: 200)
     }
 
     private var emptyState: some View {
