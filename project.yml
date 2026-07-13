@@ -30,6 +30,7 @@ targets:
       base:
         PRODUCT_NAME: CCStatusLight
         PRODUCT_BUNDLE_IDENTIFIER: com.liotru-lab.claude-code-status-light
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Signed with the Liotru ltd EOOD Apple Development team.
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "38LKT4ZSN5"
