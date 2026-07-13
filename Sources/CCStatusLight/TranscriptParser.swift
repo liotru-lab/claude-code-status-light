@@ -155,10 +155,12 @@ final class TranscriptParser {
                 state = .active; activity = ""
             }
         case .some("end_turn"):
+            // A finished turn is idle — even if the text ends with a question.
+            // Only a formal AskUserQuestion / ExitPlanMode (a tool_use, handled
+            // above) counts as "waiting on you"; a conversational "want me to…?"
+            // does not.
             if !activeAgents.isEmpty {
                 state = .active; activity = "subagent"
-            } else if detectQuestion(content) {
-                state = .waiting; activity = "question"
             } else {
                 state = .idle; activity = ""
             }
@@ -240,19 +242,6 @@ final class TranscriptParser {
     }
 
     // MARK: - Helpers
-
-    /// Question heuristic: the last non-empty text block's final paragraph has a "?".
-    private func detectQuestion(_ content: [[String: Any]]) -> Bool {
-        for block in content.reversed()
-        where block["type"] as? String == "text" {
-            if let text = block["text"] as? String, !text.isEmpty {
-                let last = text.components(separatedBy: "\n\n").last?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return last.contains("?")
-            }
-        }
-        return false
-    }
 
     private func tag(_ name: String, in s: String) -> String? {
         guard let open = s.range(of: "<\(name)>"),
