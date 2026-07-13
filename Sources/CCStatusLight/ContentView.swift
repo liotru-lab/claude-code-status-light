@@ -52,12 +52,17 @@ struct ContentView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Toggle("Show on all Spaces", isOn: $windowState.showOnAllSpaces)
+            Toggle("All Spaces", isOn: $windowState.showOnAllSpaces)
                 .toggleStyle(.checkbox)
-            Spacer()
+                .lineLimit(1)
+                .fixedSize()
+                .help("Show the window on all Spaces")
+            Spacer(minLength: 6)
             Text(store.sessions.count == 1 ? "1 session" : "\(store.sessions.count) sessions")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
             Button {
                 showLegend.toggle()
             } label: {
