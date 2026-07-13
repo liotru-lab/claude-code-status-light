@@ -39,7 +39,7 @@ func render(_ px: Int) -> CGImage {
     // Split by lines x + y = (S - w) and x + y = (S + w), perpendicular to the
     // top-left→bottom-right diagonal. `w` is the middle (yellow) band's diagonal
     // half-width; < S/3 makes the yellow band slightly smaller than equal thirds.
-    let w = S * 0.18
+    let w = S * 0.20
     let lower = S - w
     func fill(_ pts: [(CGFloat, CGFloat)], _ c: (r: Double, g: Double, b: Double)) {
         ctx.beginPath()
