@@ -53,6 +53,7 @@ This wires six Claude Code hook events to `hooks/cc-status-light-hook.sh`:
 | `UserPromptSubmit` | `working`      |
 | `PostToolUse`      | `working`      |
 | `Notification`     | `notification` |
+| `PermissionRequest`| `notification` |
 | `Stop`             | `idle`         |
 | `SessionEnd`       | `ended`        |
 

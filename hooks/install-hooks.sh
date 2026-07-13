@@ -27,6 +27,7 @@ EVENTS=(
   "UserPromptSubmit:working"
   "PostToolUse:working"
   "Notification:notification"
+  "PermissionRequest:notification"
   "Stop:idle"
   "SessionEnd:ended"
 )
