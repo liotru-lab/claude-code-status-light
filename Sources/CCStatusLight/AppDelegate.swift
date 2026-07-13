@@ -43,7 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowState = WindowState()
     private var window: NSWindow?
 
+    private let appName = "CC Status Light"
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMainMenu()
         makeWindow()
         showWindow()
     }
@@ -83,4 +86,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    // MARK: - Menu & About
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+        let appMenu = NSMenu()
+        appItem.submenu = appMenu
+
+        let about = appMenu.addItem(withTitle: "About \(appName)",
+                                    action: #selector(showAbout(_:)), keyEquivalent: "")
+        about.target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide \(appName)",
+                        action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit \(appName)",
+                        action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        // A minimal Window menu so standard window commands work.
+        let windowItem = NSMenuItem()
+        mainMenu.addItem(windowItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Minimize",
+                           action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Close",
+                           action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        NSApp.windowsMenu = windowMenu
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func showAbout(_ sender: Any?) {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: appName,
+            .credits: Self.aboutCredits,
+            NSApplication.AboutPanelOptionKey(rawValue: "Copyright"):
+                "© 2026 liotru-lab · MIT License",
+        ])
+    }
+
+    /// Description + credits + license shown in the standard About panel.
+    private static let aboutCredits: NSAttributedString = {
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+        para.paragraphSpacing = 6
+
+        let body: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: para,
+        ]
+        let dim: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: para,
+        ]
+
+        let s = NSMutableAttributedString()
+        s.append(NSAttributedString(
+            string: "Shows the status of running Claude Code sessions.\n",
+            attributes: body))
+        s.append(NSAttributedString(
+            string: "Reads session state locally — no telemetry, no cloud.\n\n",
+            attributes: dim))
+        s.append(NSAttributedString(
+            string: "Created by liotru-lab.\n",
+            attributes: body))
+        s.append(NSAttributedString(
+            string: "Released under the MIT License.\n",
+            attributes: body))
+        s.append(NSAttributedString(
+            string: "github.com/liotru-lab/claude-code-status-light",
+            attributes: dim))
+        return s
+    }()
 }
