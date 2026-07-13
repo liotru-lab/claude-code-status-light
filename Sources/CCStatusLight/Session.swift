@@ -1,14 +1,9 @@
 import Foundation
 
-/// The five POC states. These map 1:1 to Claude Code hook events via the
-/// installed hook script (see hooks/cc-status-light-hook.sh):
+/// The five states shown in the UI.
 ///
-///   SessionStart      -> ready
-///   UserPromptSubmit  -> working
-///   PostToolUse       -> working
-///   Notification      -> notification
-///   Stop              -> idle
-///   SessionEnd        -> ended
+/// Derived primarily from the transcript (see TranscriptParser); `ready` and
+/// `ended` come from the session lifecycle (hook marker / liveness).
 enum SessionState: String, Codable, CaseIterable {
     case ready
     case working
@@ -16,18 +11,16 @@ enum SessionState: String, Codable, CaseIterable {
     case idle
     case ended
 
-    /// Human label shown in the row.
     var label: String {
         switch self {
         case .ready:        return "Ready"
         case .working:      return "Working"
-        case .notification: return "Notification"
+        case .notification: return "Attention"
         case .idle:         return "Idle"
         case .ended:        return "Ended"
         }
     }
 
-    /// SF Symbol for the leading status dot.
     var symbolName: String {
         switch self {
         case .ready:        return "circle.fill"
@@ -38,7 +31,6 @@ enum SessionState: String, Codable, CaseIterable {
         }
     }
 
-    /// Sort weight: most "interesting" states float to the top.
     var priority: Int {
         switch self {
         case .working:      return 0
@@ -50,25 +42,31 @@ enum SessionState: String, Codable, CaseIterable {
     }
 }
 
-/// One Claude Code session, decoded from a `<session-id>.json` state file.
-/// Field names use snake_case on disk; the decoder is configured with
-/// `.convertFromSnakeCase`, so `session_id` -> `sessionId`, etc.
-struct Session: Identifiable, Codable {
+/// The hook-written marker at `<state-dir>/<session-id>.json`. It provides
+/// liveness and a pointer to the transcript; the app derives real state from the
+/// transcript. `state` is a coarse fallback used only when the transcript can't
+/// be read.
+struct Marker: Codable {
     let sessionId: String
-    let state: SessionState
-    var sessionName: String?
+    var state: SessionState?
     var cwd: String?
+    var transcriptPath: String?
+    var pid: Int32?
     var event: String?
     var timestamp: Date?
+}
 
-    var id: String { sessionId }
+/// A session as shown in the window — composed from a marker plus the parsed
+/// transcript.
+struct Session: Identifiable {
+    let id: String            // session id
+    var displayName: String
+    var state: SessionState
+    var activity: String      // e.g. "Edit", "subagent", "thinking", "compacting"
+    var cwd: String?
+    var subagentCount: Int
+    var live: Bool
 
     /// First 8 chars of the id, for when the session has no name.
-    var shortId: String { String(sessionId.prefix(8)) }
-
-    /// Row title: the session name if the user set one, else the short id.
-    var displayName: String {
-        if let name = sessionName, !name.isEmpty { return name }
-        return shortId
-    }
+    static func shortId(_ id: String) -> String { String(id.prefix(8)) }
 }

@@ -1,8 +1,7 @@
 import SwiftUI
 
 extension SessionState {
-    /// Status colour. Matches the busylight convention:
-    /// ready=blue, working=yellow, notification=red, idle=green, ended=gray.
+    /// Status colour. ready=blue, working=yellow, notification=red, idle=green, ended=gray.
     var color: Color {
         switch self {
         case .ready:        return .blue
@@ -77,30 +76,50 @@ struct SessionRow: View {
                 Text(session.displayName)
                     .font(.body)
                     .lineLimit(1)
-                if let cwd = session.cwd, !cwd.isEmpty {
-                    Text(abbreviate(cwd))
+                if let sub = subtitle {
+                    Text(sub)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .truncationMode(.head)
+                        .truncationMode(.middle)
                 }
             }
 
             Spacer()
 
-            Text(session.state.label)
+            if session.subagentCount > 0 {
+                Label("\(session.subagentCount)", systemImage: "person.2.fill")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
+                    .help("\(session.subagentCount) subagent(s) running")
+            }
+
+            Text(statusLabel)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(session.state.color)
         }
         .padding(.vertical, 2)
+        .opacity(session.state == .ended ? 0.6 : 1)
     }
 
-    /// Replace the home directory prefix with `~` for a shorter path.
-    private func abbreviate(_ path: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
+    /// The status text on the right: the activity when working, else the state.
+    private var statusLabel: String {
+        if session.state == .working, !session.activity.isEmpty {
+            switch session.activity {
+            case "subagent": return "Subagents"
+            case "thinking": return "Thinking"
+            case "compacting": return "Compacting"
+            default: return session.activity      // a tool name, e.g. "Edit"
+            }
         }
-        return path
+        return session.state.label
+    }
+
+    /// Second line: the working directory, home-abbreviated.
+    private var subtitle: String? {
+        guard let cwd = session.cwd, !cwd.isEmpty else { return nil }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return cwd.hasPrefix(home) ? "~" + cwd.dropFirst(home.count) : cwd
     }
 }

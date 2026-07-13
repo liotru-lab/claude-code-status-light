@@ -8,8 +8,12 @@ sessions in a single window. Proof of concept.
 - Closing the window does **not** quit the app — it keeps running and the
   dock icon reopens the window
 - Optional **"Show on all Spaces"** toggle
-- Session discovery is **hooks-only**: Claude Code hooks write a small state
-  file per session; the app reads it. No process scanning, no JSONL parsing.
+- **Hybrid discovery:** lightweight hooks mark which sessions are live (and point
+  at each transcript); the app tails the session's JSONL transcript to derive
+  accurate state — including **subagent awareness** (a session with running
+  subagents reads as *working*, not *idle*) and the real **session name**
+  (`custom-title` › `ai-title` › `slug`). The right-hand label shows live
+  activity (the current tool, `Thinking`, `Subagents`, `Compacting`, …).
 
 > Status: POC. Not signed, not notarized, not distributed.
 

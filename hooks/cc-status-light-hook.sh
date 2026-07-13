@@ -41,8 +41,15 @@ session_id="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null 
 # interfere with the session.
 [ -n "$session_id" ] || exit 0
 
-cwd="$(printf '%s' "$payload"   | jq -r '.cwd // empty'             2>/dev/null || true)"
-event="$(printf '%s' "$payload" | jq -r '.hook_event_name // empty' 2>/dev/null || true)"
+cwd="$(printf '%s' "$payload"        | jq -r '.cwd // empty'             2>/dev/null || true)"
+event="$(printf '%s' "$payload"      | jq -r '.hook_event_name // empty' 2>/dev/null || true)"
+transcript="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null || true)"
+
+# PID of the owning Claude Code process, for liveness checks by the app.
+# CLAUDE_PID is set by Claude Code when available; otherwise the hook's parent
+# is the process that spawned it.
+pid="${CLAUDE_PID:-$PPID}"
+case "$pid" in ''|*[!0-9]*) pid=0 ;; esac
 
 # Resolve the overloaded Notification event by its sub-type. A waiting session
 # ("idle_prompt", or an unrecognised/absent type) should read as the calm `idle`,
@@ -71,8 +78,11 @@ jq -n \
   --arg state "$state" \
   --arg cwd "$cwd" \
   --arg event "$event" \
+  --arg transcript_path "$transcript" \
+  --argjson pid "$pid" \
   --arg timestamp "$timestamp" \
-  '{session_id:$session_id, state:$state, cwd:$cwd, event:$event, timestamp:$timestamp}' \
+  '{session_id:$session_id, state:$state, cwd:$cwd, event:$event,
+    transcript_path:$transcript_path, pid:$pid, timestamp:$timestamp}' \
   > "$tmp"
 
 chmod 600 "$tmp"

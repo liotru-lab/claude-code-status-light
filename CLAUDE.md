@@ -25,16 +25,27 @@ not contradict it.
 - Keep view state in small `@MainActor` `ObservableObject`s (`SessionStore`,
   `WindowState`).
 
-## Session state
+## Session state — hybrid (hooks for liveness, JSONL for state)
 
-- Source of truth on disk: `~/Library/Application Support/CCStatusLight/state/<session-id>.json`,
-  one single-object JSON file per session, written by our hook.
-- Five states only: `ready`, `working`, `notification`, `idle`, `ended`
-  (`SessionState`). The event→state mapping lives in `hooks/cc-status-light-hook.sh`
-  and its installer — keep those and `SessionState` in sync.
-- `SessionStore` reads the directory (hooks-only discovery — no process scan, no
-  JSONL parsing) and polls once a second. On-disk field names are snake_case;
-  decode with `.convertFromSnakeCase` + `.iso8601`.
+- **Hooks provide liveness + a pointer.** `hooks/cc-status-light-hook.sh` writes a
+  marker at `~/Library/Application Support/CCStatusLight/state/<session-id>.json`
+  containing `session_id`, `transcript_path`, `pid`, `cwd`, a coarse fallback
+  `state`, and `timestamp` (`Marker` in `Session.swift`). SessionStart marks a
+  session live; SessionEnd marks it `ended`.
+- **The transcript is the source of truth for state.** `TranscriptParser`
+  incrementally tails `<session-id>.jsonl` and runs the ported state machine:
+  track `Agent` tool_use ids → keep `working` while subagents run (sync removed on
+  `completed` tool_result; async removed on a `queue-operation` completion
+  notification); `end_turn`+question → attention; `turn_duration`/`idle_prompt`
+  safety nets. It also reads the display name (`custom-title` › `ai-title` › `slug`).
+- `SessionScanner` (off the main thread) reads markers, checks `pid` liveness
+  (`kill(pid,0)`), tails transcripts via cached parsers, prunes stale markers, and
+  composes `Session`s. `SessionStore` (@MainActor) polls it once a second.
+- Five UI states (`SessionState`): `ready`, `working`, `notification`, `idle`,
+  `ended`. `ready`/`ended` come from lifecycle; the rest are derived from the
+  transcript. Verify the parser with `CCStatusLight --parse <transcript.jsonl>`.
+- The per-event hook `state` values are now only a fallback (used if the transcript
+  can't be read). Keep the hook's states and `SessionState` in sync.
 
 ## Hooks
 
