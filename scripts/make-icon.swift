@@ -36,9 +36,11 @@ func render(_ px: Int) -> CGImage {
     ctx.addEllipse(in: CGRect(x: inset, y: inset, width: S - 2*inset, height: S - 2*inset))
     ctx.clip()
 
-    // Split by lines x + y = 2S/3 and x + y = 4S/3 (perpendicular to the
-    // top-left→bottom-right diagonal) into three equal diagonal bands.
-    let t1 = S * 2/3
+    // Split by lines x + y = (S - w) and x + y = (S + w), perpendicular to the
+    // top-left→bottom-right diagonal. `w` is the middle (yellow) band's diagonal
+    // half-width; < S/3 makes the yellow band slightly smaller than equal thirds.
+    let w = S * 0.28
+    let lower = S - w
     func fill(_ pts: [(CGFloat, CGFloat)], _ c: (r: Double, g: Double, b: Double)) {
         ctx.beginPath()
         ctx.move(to: CGPoint(x: pts[0].0, y: pts[0].1))
@@ -47,9 +49,9 @@ func render(_ px: Int) -> CGImage {
         ctx.setFillColor(red: c.r, green: c.g, blue: c.b, alpha: 1)
         ctx.fillPath()
     }
-    fill([(0, 0), (t1, 0), (0, t1)], red)                                           // top-left
-    fill([(t1, 0), (S, 0), (S, S/3), (S/3, S), (0, S), (0, t1)], yellow)            // middle
-    fill([(S, S/3), (S, S), (S/3, S)], green)                                       // bottom-right
+    fill([(0, 0), (lower, 0), (0, lower)], red)                                      // top-left
+    fill([(lower, 0), (S, 0), (S, w), (w, S), (0, S), (0, lower)], yellow)          // middle
+    fill([(S, w), (S, S), (w, S)], green)                                           // bottom-right
 
     return ctx.makeImage()!
 }
