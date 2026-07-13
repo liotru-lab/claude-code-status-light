@@ -30,11 +30,8 @@ targets:
       base:
         PRODUCT_NAME: CCStatusLight
         PRODUCT_BUNDLE_IDENTIFIER: com.liotru-lab.claude-code-status-light
-        # Local, unsigned POC build — no dev team required.
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGNING_REQUIRED: "NO"
-        CODE_SIGNING_ALLOWED: "NO"
-        DEVELOPMENT_TEAM: ""
+        # Signed with the Liotru ltd EOOD Apple Development team.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: "38LKT4ZSN5"
         ENABLE_HARDENED_RUNTIME: "NO"
         COMBINE_HIDPI_IMAGES: "YES"
