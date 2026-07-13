@@ -8,6 +8,12 @@
 #
 # where <state> is one of: ready working notification idle ended
 #
+# Special case: the Notification event is overloaded — Claude Code fires it both
+# for "waiting for your input" (calm) and for real attention (permission /
+# elicitation prompts). When called for a Notification, this script inspects the
+# payload's notification_type and downgrades a mere waiting nudge to `idle`,
+# reserving the red `notification` state for genuine attention.
+#
 # Reads the hook JSON payload on stdin (session_id, cwd, hook_event_name, ...)
 # and writes a per-session file that the CC Status Light app reads:
 #
@@ -37,6 +43,21 @@ session_id="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null 
 
 cwd="$(printf '%s' "$payload"   | jq -r '.cwd // empty'             2>/dev/null || true)"
 event="$(printf '%s' "$payload" | jq -r '.hook_event_name // empty' 2>/dev/null || true)"
+
+# Resolve the overloaded Notification event by its sub-type. A waiting session
+# ("idle_prompt", or an unrecognised/absent type) should read as the calm `idle`,
+# not the attention-grabbing red `notification`. Real permission/elicitation
+# prompts keep `notification`. (Permission prompts also arrive via the separate
+# PermissionRequest hook, which stays mapped to `notification`.)
+if [ "$event" = "Notification" ]; then
+  ntype="$(printf '%s' "$payload" | jq -r '.notification_type // empty' 2>/dev/null || true)"
+  case "$ntype" in
+    permission_prompt|elicitation_dialog) state="notification" ;;
+    *)                                     state="idle" ;;
+  esac
+  [ -n "$ntype" ] && event="Notification/${ntype}"
+fi
+
 timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 dir="${HOME}/Library/Application Support/CCStatusLight/state"

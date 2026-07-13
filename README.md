@@ -52,9 +52,14 @@ This wires six Claude Code hook events to `hooks/cc-status-light-hook.sh`:
 | `SessionStart`     | `ready`        |
 | `UserPromptSubmit` | `working`      |
 | `PostToolUse`      | `working`      |
-| `Notification`     | `notification` |
+| `Notification`     | `idle` if it's a waiting nudge (`idle_prompt`); `notification` for permission/elicitation prompts |
 | `PermissionRequest`| `notification` |
 | `Stop`             | `idle`         |
+
+The `Notification` event is overloaded — Claude Code fires it both when a session
+is just waiting for you and when it genuinely needs attention. The hook inspects
+the payload's `notification_type` so a plain waiting nudge reads as calm `idle`,
+and only real permission/elicitation prompts turn the row red.
 | `SessionEnd`       | `ended`        |
 
 The hook writes one file per session:
