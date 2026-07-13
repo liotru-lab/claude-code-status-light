@@ -148,6 +148,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .paragraphStyle: para,
         ]
 
+        func link(_ text: String, _ url: String, _ base: [NSAttributedString.Key: Any]) -> NSAttributedString {
+            var attrs = base
+            attrs[.link] = URL(string: url)
+            attrs[.foregroundColor] = NSColor.linkColor
+            attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            return NSAttributedString(string: text, attributes: attrs)
+        }
+
         let s = NSMutableAttributedString()
         s.append(NSAttributedString(
             string: "Shows the status of running Claude Code sessions.\n",
@@ -155,15 +163,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         s.append(NSAttributedString(
             string: "Reads session state locally — no telemetry, no cloud.\n\n",
             attributes: dim))
+        s.append(NSAttributedString(string: "Created by ", attributes: body))
+        s.append(link("liotru-lab", "https://www.liotrulab.com", body))
+        s.append(NSAttributedString(string: ".\n", attributes: body))
         s.append(NSAttributedString(
-            string: "Created by liotru-lab.\n",
+            string: "Released under the MIT License.\n\n",
             attributes: body))
-        s.append(NSAttributedString(
-            string: "Released under the MIT License.\n",
-            attributes: body))
-        s.append(NSAttributedString(
-            string: "github.com/liotru-lab/claude-code-status-light",
-            attributes: dim))
+        s.append(link("liotrulab.com", "https://www.liotrulab.com", dim))
+        s.append(NSAttributedString(string: "   ·   ", attributes: dim))
+        s.append(link("Source on GitHub", "https://github.com/liotru-lab/claude-code-status-light", dim))
         return s
     }()
 }
