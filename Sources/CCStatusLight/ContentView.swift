@@ -148,17 +148,36 @@ struct SessionRow: View {
         .opacity(session.state == .ended ? 0.6 : 1)
     }
 
-    /// The status text on the right: the activity when working, else the state.
+    /// The status text on the right: a friendly activity phrase when working,
+    /// else the state label.
     private var statusLabel: String {
         if session.state == .working, !session.activity.isEmpty {
-            switch session.activity {
-            case "subagent": return "Subagents"
-            case "thinking": return "Thinking"
-            case "compacting": return "Compacting"
-            default: return session.activity      // a tool name, e.g. "Edit"
-            }
+            return Self.friendly(session.activity)
         }
         return session.state.label
+    }
+
+    /// Map a raw activity (tool name or internal marker) to a human phrase.
+    static func friendly(_ activity: String) -> String {
+        switch activity {
+        case "subagent":                  return "Subagents"
+        case "thinking":                  return "Thinking"
+        case "compacting":                return "Compacting"
+        case "Bash":                      return "Running command"
+        case "Edit", "MultiEdit", "NotebookEdit": return "Editing"
+        case "Write":                     return "Writing"
+        case "Read":                      return "Reading"
+        case "Grep", "Glob":              return "Searching"
+        case "WebFetch", "WebSearch":     return "Browsing the web"
+        case "ToolSearch":                return "Finding tools"
+        case "Task", "Agent":             return "Subagents"
+        case "TodoWrite":                 return "Planning"
+        case "AskUserQuestion", "ExitPlanMode": return "Asking"
+        default:
+            // MCP tools look like "mcp__server__tool"; anything else is a tool
+            // name we didn't map — fall back to a calm generic.
+            return "Working"
+        }
     }
 
     /// Second line: the working directory, home-abbreviated.
