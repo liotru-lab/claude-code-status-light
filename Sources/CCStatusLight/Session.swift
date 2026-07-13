@@ -40,6 +40,20 @@ enum SessionState: String, Codable, CaseIterable {
         case .ended:        return 4
         }
     }
+
+    /// One-line explanation, shown in the in-app legend.
+    var legend: String {
+        switch self {
+        case .ready:        return "Session started; no activity yet."
+        case .working:      return "Actively working — the label shows the current tool, Thinking, Subagents, or Compacting."
+        case .notification: return "Waiting for you — it asked a question or needs a permission/decision."
+        case .idle:         return "Finished its turn; waiting quietly for your next prompt."
+        case .ended:        return "Session closed, or its process exited."
+        }
+    }
+
+    /// Lifecycle order, used for the legend.
+    static let legendOrder: [SessionState] = [.ready, .working, .notification, .idle, .ended]
 }
 
 /// The hook-written marker at `<state-dir>/<session-id>.json`. It provides

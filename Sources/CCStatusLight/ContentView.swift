@@ -16,6 +16,7 @@ extension SessionState {
 struct ContentView: View {
     @EnvironmentObject var store: SessionStore
     @EnvironmentObject var windowState: WindowState
+    @State private var showLegend = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,16 +51,60 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 8) {
             Toggle("Show on all Spaces", isOn: $windowState.showOnAllSpaces)
                 .toggleStyle(.checkbox)
             Spacer()
             Text(store.sessions.count == 1 ? "1 session" : "\(store.sessions.count) sessions")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Button {
+                showLegend.toggle()
+            } label: {
+                Image(systemName: "questionmark.circle")
+            }
+            .buttonStyle(.borderless)
+            .help("What the statuses mean")
+            .popover(isPresented: $showLegend, arrowEdge: .bottom) {
+                LegendView()
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+/// A small popover explaining the five statuses.
+struct LegendView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Statuses")
+                .font(.headline)
+            ForEach(SessionState.legendOrder, id: \.self) { state in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: state.symbolName)
+                        .foregroundStyle(state.color)
+                        .font(.system(size: 11))
+                        .frame(width: 14)
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(state.label)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(state.color)
+                        Text(state.legend)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            Divider()
+            Label("Number of running subagents", systemImage: "person.2.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(width: 300)
     }
 }
 
