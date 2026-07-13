@@ -1,0 +1,40 @@
+name: CCStatusLight
+
+options:
+  bundleIdPrefix: com.liotru-lab
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  CCStatusLight:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/CCStatusLight
+    info:
+      path: Sources/CCStatusLight/Info.plist
+      properties:
+        CFBundleName: CCStatusLight
+        CFBundleDisplayName: CC Status Light
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: "Copyright © 2026 liotru-lab. MIT License."
+    settings:
+      base:
+        PRODUCT_NAME: CCStatusLight
+        PRODUCT_BUNDLE_IDENTIFIER: com.liotru-lab.claude-code-status-light
+        # Local, unsigned POC build — no dev team required.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: "NO"
+        COMBINE_HIDPI_IMAGES: "YES"
