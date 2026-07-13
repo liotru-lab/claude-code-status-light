@@ -64,8 +64,8 @@ final class SessionScanner {
             }
 
             // Compose state.
-            let state: SessionState
-            let activity: String
+            var state: SessionState
+            var activity: String
             let subagents: Int
             let live: Bool
             if ended {
@@ -78,6 +78,14 @@ final class SessionScanner {
             } else {
                 state = marker.state ?? .idle; activity = marker.event ?? ""
                 subagents = 0; live = true
+            }
+
+            // Overlay: a pending permission / elicitation prompt (which the
+            // transcript alone can't reveal) is signalled by the hook writing
+            // `notification` into the marker. Surface it as Attention.
+            if live, marker.state == .notification {
+                state = .notification
+                activity = "permission"
             }
 
             let name = parser?.nameFromTranscript ?? Session.shortId(marker.sessionId)
