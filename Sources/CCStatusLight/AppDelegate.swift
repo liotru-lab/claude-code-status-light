@@ -163,9 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         s.append(NSAttributedString(
             string: "Reads session state locally — no telemetry, no cloud.\n\n",
             attributes: dim))
-        s.append(NSAttributedString(string: "Created by ", attributes: body))
-        s.append(link("liotru-lab", "https://www.liotrulab.com", body))
-        s.append(NSAttributedString(string: ".\n", attributes: body))
+        s.append(NSAttributedString(string: "Created by liotru-lab.\n", attributes: body))
         s.append(NSAttributedString(
             string: "Released under the MIT License.\n\n",
             attributes: body))
