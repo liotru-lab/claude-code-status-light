@@ -30,13 +30,6 @@ final class TranscriptParser {
     private var gitBranch: String?
     private var permissionMode: String?
     private var contextTokens: Int?   // point-in-time: context window in use (last msg)
-    private var outputTokens: Int?    // last assistant message
-
-    // Cumulative token totals across the whole session, for the cost estimate.
-    private var totalInput = 0
-    private var totalOutput = 0
-    private var totalCacheCreate = 0
-    private var totalCacheRead = 0
 
     private static let isoFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -74,10 +67,7 @@ final class TranscriptParser {
     /// `/status`-style detail derived from the transcript.
     var detail: SessionDetail {
         SessionDetail(model: model, ccVersion: ccVersion, gitBranch: gitBranch,
-                      permissionMode: permissionMode,
-                      contextTokens: contextTokens, outputTokens: outputTokens,
-                      totalInput: totalInput, totalOutput: totalOutput,
-                      totalCacheCreate: totalCacheCreate, totalCacheRead: totalCacheRead)
+                      permissionMode: permissionMode, contextTokens: contextTokens)
     }
 
     /// State mapped into the app's five-state model.
@@ -138,8 +128,7 @@ final class TranscriptParser {
         activeAgents.removeAll(); compacting = false; sawAssistant = false
         customTitle = nil; aiTitle = nil; slug = nil
         model = nil; ccVersion = nil; gitBranch = nil; permissionMode = nil
-        contextTokens = nil; outputTokens = nil
-        totalInput = 0; totalOutput = 0; totalCacheCreate = 0; totalCacheRead = 0
+        contextTokens = nil
     }
 
     // MARK: - Line dispatch
@@ -190,15 +179,12 @@ final class TranscriptParser {
             let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
             let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
             let input = usage["input_tokens"] as? Int ?? 0
-            let out = usage["output_tokens"] as? Int ?? 0
+            // Point-in-time context window in use (last message wins). Deliberately
+            // not summed across messages: a cumulative cost estimate couldn't be
+            // reconciled with /status (Claude Code writes one message as several
+            // lines, and its billing source differs from the transcript), so only
+            // this gauge is surfaced.
             contextTokens = cacheRead + cacheCreate + input
-            outputTokens = out
-            // Each assistant line is consumed once (incremental cursor), so these
-            // sums don't double-count across update() calls.
-            totalInput += input
-            totalOutput += out
-            totalCacheCreate += cacheCreate
-            totalCacheRead += cacheRead
         }
 
         // Record subagent spawns.

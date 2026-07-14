@@ -253,16 +253,8 @@ struct SessionDetailView: View {
             if let b = detail.gitBranch { field("Branch", Self.friendlyBranch(b)) }
             if let pm = detail.permissionMode { field("Mode", Self.friendlyMode(pm)) }
             if let c = detail.contextTokens { field("Context", "~\(Self.fmt(c)) in use") }
-            if let cost = costSummary { field("Cost", cost) }
         }
         .font(.caption)
-    }
-
-    /// "~$0.42 est. · 1.2M tokens" — a list-price estimate; nil if unpriceable.
-    private var costSummary: String? {
-        guard let usd = detail.estimatedCostUSD else { return nil }
-        let dollars = usd < 0.01 ? "<$0.01" : String(format: "$%.2f", usd)
-        return "~\(dollars) est. · \(Self.fmt(detail.totalTokens)) tokens"
     }
 
     private func field(_ label: String, _ value: String) -> some View {

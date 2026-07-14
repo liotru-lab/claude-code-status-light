@@ -20,9 +20,6 @@ if let i = arguments.firstIndex(of: "--parse"), i + 1 < arguments.count {
         "gitBranch": d.gitBranch ?? "",
         "permissionMode": d.permissionMode ?? "",
         "contextTokens": d.contextTokens ?? 0,
-        "outputTokens": d.outputTokens ?? 0,
-        "totalTokens": d.totalTokens,
-        "estimatedCostUSD": d.estimatedCostUSD ?? 0,
     ]
     if let data = try? JSONSerialization.data(withJSONObject: out,
                                               options: [.prettyPrinted, .sortedKeys]) {
