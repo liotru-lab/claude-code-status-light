@@ -70,6 +70,23 @@ struct Marker: Codable {
     var timestamp: Date?
 }
 
+/// `/status`-style detail derived from the transcript, shown when a row is
+/// expanded. All fields optional — only what the transcript has surfaced so far.
+struct SessionDetail: Equatable {
+    var model: String?          // raw id, e.g. "claude-opus-4-8"
+    var ccVersion: String?      // Claude Code version, e.g. "2.1.208"
+    var gitBranch: String?
+    var permissionMode: String? // e.g. "default", "acceptEdits", "plan"
+    var contextTokens: Int?     // approx context window in use
+    var outputTokens: Int?      // output tokens of the last assistant message
+
+    /// True when there's at least one field worth showing.
+    var hasAny: Bool {
+        model != nil || ccVersion != nil || gitBranch != nil
+            || permissionMode != nil || contextTokens != nil
+    }
+}
+
 /// A session as shown in the window — composed from a marker plus the parsed
 /// transcript.
 struct Session: Identifiable {
@@ -80,6 +97,7 @@ struct Session: Identifiable {
     var cwd: String?
     var subagentCount: Int
     var live: Bool
+    var detail: SessionDetail?
 
     /// First 8 chars of the id, for when the session has no name.
     static func shortId(_ id: String) -> String { String(id.prefix(8)) }

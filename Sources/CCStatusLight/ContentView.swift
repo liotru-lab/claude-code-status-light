@@ -18,6 +18,7 @@ struct ContentView: View {
     @EnvironmentObject var store: SessionStore
     @EnvironmentObject var windowState: WindowState
     @State private var showLegend = false
+    @State private var expanded: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +26,8 @@ struct ContentView: View {
                 emptyState
             } else {
                 List(store.sessions) { session in
-                    SessionRow(session: session)
+                    SessionRow(session: session,
+                               isExpanded: expandedBinding(session.id))
                 }
                 .listStyle(.inset)
             }
@@ -33,6 +35,13 @@ struct ContentView: View {
             footer
         }
         .frame(minWidth: 200, minHeight: 200)
+    }
+
+    private func expandedBinding(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { expanded.contains(id) },
+            set: { on in if on { expanded.insert(id) } else { expanded.remove(id) } }
+        )
     }
 
     @ViewBuilder
@@ -133,41 +142,62 @@ struct LegendView: View {
 
 struct SessionRow: View {
     let session: Session
+    @Binding var isExpanded: Bool
+
+    /// Whether there's detail worth expanding to.
+    private var expandable: Bool { session.detail?.hasAny == true }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: session.state.symbolName)
-                .foregroundStyle(session.state.color)
-                .font(.system(size: 12))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: session.state.symbolName)
+                    .foregroundStyle(session.state.color)
+                    .font(.system(size: 12))
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.displayName)
-                    .font(.body)
-                    .lineLimit(1)
-                if let sub = subtitle {
-                    Text(sub)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(session.displayName)
+                        .font(.body)
                         .lineLimit(1)
-                        .truncationMode(.middle)
+                    if let sub = subtitle {
+                        Text(sub)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
+
+                Spacer()
+
+                if session.subagentCount > 0 {
+                    Label("\(session.subagentCount)", systemImage: "person.2.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .labelStyle(.titleAndIcon)
+                        .help("\(session.subagentCount) subagent(s) running")
+                }
+
+                Text(statusLabel)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(session.state.color)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .opacity(expandable ? 1 : 0)
             }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+            .onTapGesture { if expandable { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } } }
 
-            Spacer()
-
-            if session.subagentCount > 0 {
-                Label("\(session.subagentCount)", systemImage: "person.2.fill")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
-                    .help("\(session.subagentCount) subagent(s) running")
+            if isExpanded, let detail = session.detail {
+                SessionDetailView(detail: detail)
+                    .padding(.leading, 22)
+                    .padding(.top, 4)
+                    .padding(.bottom, 2)
             }
-
-            Text(statusLabel)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(session.state.color)
         }
-        .padding(.vertical, 2)
         .opacity(session.state == .ended ? 0.6 : 1)
     }
 
@@ -208,5 +238,76 @@ struct SessionRow: View {
         guard let cwd = session.cwd, !cwd.isEmpty else { return nil }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return cwd.hasPrefix(home) ? "~" + cwd.dropFirst(home.count) : cwd
+    }
+}
+
+/// The expandable per-session `/status`-style detail: model, CC version, branch,
+/// context/output tokens, permission mode. Only rows with a value are shown.
+struct SessionDetailView: View {
+    let detail: SessionDetail
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let m = detail.model { field("Model", Self.friendlyModel(m)) }
+            if let v = detail.ccVersion { field("Claude Code", v) }
+            if let b = detail.gitBranch { field("Branch", Self.friendlyBranch(b)) }
+            if let tokens = tokenSummary { field("Tokens", tokens) }
+            if let pm = detail.permissionMode { field("Mode", Self.friendlyMode(pm)) }
+        }
+        .font(.caption)
+    }
+
+    private func field(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(width: 80, alignment: .leading)
+            Text(value)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// "~194k ctx · 2.9k out" from the token counts.
+    private var tokenSummary: String? {
+        var parts: [String] = []
+        if let c = detail.contextTokens { parts.append("~\(Self.fmt(c)) ctx") }
+        if let o = detail.outputTokens { parts.append("\(Self.fmt(o)) out") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// 193591 → "194k", 2859 → "2.9k", 640 → "640".
+    static func fmt(_ n: Int) -> String {
+        if n < 1000 { return "\(n)" }
+        let k = Double(n) / 1000
+        return k < 10 ? String(format: "%.1fk", k) : "\(Int(k.rounded()))k"
+    }
+
+    /// "claude-opus-4-8" → "Opus 4.8"; falls back to a title-cased id.
+    static func friendlyModel(_ id: String) -> String {
+        var s = id
+        if s.hasPrefix("claude-") { s.removeFirst("claude-".count) }
+        // Drop trailing date stamps like "20251001".
+        let comps: [String] = s.split(separator: "-").map(String.init)
+            .filter { !($0.count == 8 && $0.allSatisfy(\.isNumber)) }
+        guard let family = comps.first else { return id }
+        let version = comps.dropFirst().joined(separator: ".")
+        let name = family.prefix(1).uppercased() + family.dropFirst()
+        return version.isEmpty ? name : "\(name) \(version)"
+    }
+
+    static func friendlyBranch(_ b: String) -> String {
+        b == "HEAD" ? "detached HEAD" : b
+    }
+
+    static func friendlyMode(_ m: String) -> String {
+        switch m {
+        case "default":           return "Default"
+        case "acceptEdits":       return "Accept edits"
+        case "plan":              return "Plan mode"
+        case "bypassPermissions": return "Bypass permissions"
+        default:                  return m
+        }
     }
 }

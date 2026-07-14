@@ -7,6 +7,7 @@ let arguments = CommandLine.arguments
 if let i = arguments.firstIndex(of: "--parse"), i + 1 < arguments.count {
     let parser = TranscriptParser(url: URL(fileURLWithPath: arguments[i + 1]))
     parser.update()
+    let d = parser.detail
     let out: [String: Any] = [
         "state": parser.sessionState.rawValue,
         "activity": parser.activity,
@@ -14,6 +15,12 @@ if let i = arguments.firstIndex(of: "--parse"), i + 1 < arguments.count {
         "name": parser.nameFromTranscript ?? "",
         "started": parser.hasStarted,
         "lastLineTime": parser.lastLineTime.map { ISO8601DateFormatter().string(from: $0) } ?? "",
+        "model": d.model ?? "",
+        "ccVersion": d.ccVersion ?? "",
+        "gitBranch": d.gitBranch ?? "",
+        "permissionMode": d.permissionMode ?? "",
+        "contextTokens": d.contextTokens ?? 0,
+        "outputTokens": d.outputTokens ?? 0,
     ]
     if let data = try? JSONSerialization.data(withJSONObject: out,
                                               options: [.prettyPrinted, .sortedKeys]) {

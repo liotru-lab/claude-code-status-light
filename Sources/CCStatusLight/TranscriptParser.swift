@@ -24,6 +24,14 @@ final class TranscriptParser {
     private var compacting = false
     private var sawAssistant = false
 
+    // Status detail (last value wins), surfaced in the per-session detail view.
+    private var model: String?
+    private var ccVersion: String?
+    private var gitBranch: String?
+    private var permissionMode: String?
+    private var contextTokens: Int?
+    private var outputTokens: Int?
+
     private static let isoFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -56,6 +64,13 @@ final class TranscriptParser {
     var subagentCount: Int { activeAgents.count }
     var hasStarted: Bool { sawAssistant }
     var nameFromTranscript: String? { customTitle ?? aiTitle ?? slug }
+
+    /// `/status`-style detail derived from the transcript.
+    var detail: SessionDetail {
+        SessionDetail(model: model, ccVersion: ccVersion, gitBranch: gitBranch,
+                      permissionMode: permissionMode,
+                      contextTokens: contextTokens, outputTokens: outputTokens)
+    }
 
     /// State mapped into the app's five-state model.
     var sessionState: SessionState {
@@ -114,6 +129,8 @@ final class TranscriptParser {
         state = .idle; activity = ""; lastLineTime = nil
         activeAgents.removeAll(); compacting = false; sawAssistant = false
         customTitle = nil; aiTitle = nil; slug = nil
+        model = nil; ccVersion = nil; gitBranch = nil; permissionMode = nil
+        contextTokens = nil; outputTokens = nil
     }
 
     // MARK: - Line dispatch
@@ -128,6 +145,11 @@ final class TranscriptParser {
         if let ts = dict["timestamp"] as? String, let d = Self.parseDate(ts) {
             if lastLineTime == nil || d > lastLineTime! { lastLineTime = d }
         }
+
+        // Status detail carried on most envelopes (last non-empty value wins).
+        if let v = dict["version"] as? String, !v.isEmpty { ccVersion = v }
+        if let b = dict["gitBranch"] as? String, !b.isEmpty { gitBranch = b }
+        if let pm = dict["permissionMode"] as? String, !pm.isEmpty { permissionMode = pm }
 
         // Standalone name lines carry almost no envelope.
         switch type {
@@ -153,6 +175,15 @@ final class TranscriptParser {
         sawAssistant = true
         guard let message = dict["message"] as? [String: Any] else { return }
         let content = message["content"] as? [[String: Any]] ?? []
+
+        if let m = message["model"] as? String, !m.isEmpty { model = m }
+        if let usage = message["usage"] as? [String: Any] {
+            let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+            let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
+            let input = usage["input_tokens"] as? Int ?? 0
+            contextTokens = cacheRead + cacheCreate + input
+            if let out = usage["output_tokens"] as? Int { outputTokens = out }
+        }
 
         // Record subagent spawns.
         for block in content where block["type"] as? String == "tool_use" {
