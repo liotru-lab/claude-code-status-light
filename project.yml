@@ -31,6 +31,10 @@ targets:
       properties:
         CFBundleName: CCStatusLight
         CFBundleDisplayName: CC Status Light
+        # Wire the bundle version to the build settings so releases report the
+        # real version (otherwise XcodeGen hardcodes 1.0 / 1).
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSMinimumSystemVersion: "15.0"
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "Copyright © 2026 liotru-lab. MIT License."
