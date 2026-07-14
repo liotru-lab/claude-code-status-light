@@ -82,10 +82,22 @@ final class SessionScanner {
 
             // Overlay: a pending permission / elicitation prompt (which the
             // transcript alone can't reveal) is signalled by the hook writing
-            // `notification` into the marker. Surface it as Attention.
+            // `notification` into the marker. Surface it as Attention — but only
+            // while it's current. If the transcript has produced activity clearly
+            // newer than the marker, the prompt was answered and work resumed, so
+            // a live state must win over the stale marker. (2s tolerance absorbs
+            // the marker's whole-second timestamp truncation.)
             if live, marker.state == .notification {
-                state = .notification
-                activity = "permission"
+                let transcriptMovedOn: Bool
+                if let last = parser?.lastLineTime, let mt = marker.timestamp {
+                    transcriptMovedOn = last.timeIntervalSince(mt) > 2
+                } else {
+                    transcriptMovedOn = false
+                }
+                if !transcriptMovedOn {
+                    state = .notification
+                    activity = "permission"
+                }
             }
 
             let name = parser?.nameFromTranscript ?? Session.shortId(marker.sessionId)

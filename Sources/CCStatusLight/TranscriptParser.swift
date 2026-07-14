@@ -19,9 +19,24 @@ final class TranscriptParser {
 
     private(set) var state: State = .idle
     private(set) var activity: String = ""
+    private(set) var lastLineTime: Date?   // newest envelope timestamp seen
     private var activeAgents: Set<String> = []
     private var compacting = false
     private var sawAssistant = false
+
+    private static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let iso: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    private static func parseDate(_ s: String) -> Date? {
+        isoFractional.date(from: s) ?? iso.date(from: s)
+    }
 
     // Name candidates (last value wins). Preference: custom (user) > ai > slug.
     private var customTitle: String?
@@ -96,7 +111,7 @@ final class TranscriptParser {
 
     private func resetMachine() {
         offset = 0; partial = Data()
-        state = .idle; activity = ""
+        state = .idle; activity = ""; lastLineTime = nil
         activeAgents.removeAll(); compacting = false; sawAssistant = false
         customTitle = nil; aiTitle = nil; slug = nil
     }
@@ -109,6 +124,10 @@ final class TranscriptParser {
               let dict = obj as? [String: Any],
               let type = dict["type"] as? String
         else { return }
+
+        if let ts = dict["timestamp"] as? String, let d = Self.parseDate(ts) {
+            if lastLineTime == nil || d > lastLineTime! { lastLineTime = d }
+        }
 
         // Standalone name lines carry almost no envelope.
         switch type {

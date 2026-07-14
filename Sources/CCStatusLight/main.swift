@@ -13,6 +13,7 @@ if let i = arguments.firstIndex(of: "--parse"), i + 1 < arguments.count {
         "subagents": parser.subagentCount,
         "name": parser.nameFromTranscript ?? "",
         "started": parser.hasStarted,
+        "lastLineTime": parser.lastLineTime.map { ISO8601DateFormatter().string(from: $0) } ?? "",
     ]
     if let data = try? JSONSerialization.data(withJSONObject: out,
                                               options: [.prettyPrinted, .sortedKeys]) {
