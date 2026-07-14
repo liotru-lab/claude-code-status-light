@@ -1,5 +1,10 @@
 # Roadmap — 0.2.0
 
+> **Status: shipped in v0.2.0.** All four phases (1a, 1b, 2a, 2b) landed. Cost
+> estimation and live rate-limit bars were investigated and deliberately omitted
+> (not reliably derivable from local data — see the notes below). The
+> pay-as-you-go API-key path remains backlog.
+
 Two features, planned. Target release **0.2.0**. Sequence: `1a → 1b → 2a → 2b`.
 
 ## Feature 1 — Claude status
