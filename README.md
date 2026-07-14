@@ -29,6 +29,12 @@ which sessions are live.
 Closing the window keeps the app running in the background; the dock icon reopens
 it. There's an optional **Show on all Spaces** toggle.
 
+**Click a session** to expand its detail — model (e.g. Opus 4.8), Claude Code
+version, git branch, permission mode, and context-window tokens in use. The footer
+**account** button (👤) shows who you're signed in as and lifetime usage
+(sessions, messages, per-model tokens), read from Claude Code's own files. (The
+live `/status` rate-limit bars aren't shown — that data isn't stored locally.)
+
 ## Install
 
 Requires **macOS 15+**.
@@ -114,6 +120,30 @@ permission/elicitation prompts turn the row red.
 idempotent, backs up first, and `--uninstall` removes only our own entries —
 leaving any other hooks (e.g. a busylight) untouched. It never writes
 `~/.claude.json`, never registers a plugin, never installs a LaunchAgent.
+
+## Callbacks (busylight, notifications, …)
+
+CC Status Light can run a command whenever the **overall** state changes, so a
+single indicator reflects your most urgent session. Open **CC Status Light ▸
+Settings…** (⌘,):
+
+- Toggle **Run a command when the overall state changes**.
+- Edit a command per state — **Attention · Working · Ready · Idle · No sessions** —
+  each with a **Test** button. Placeholders: `{state} {color} {count} {name}`.
+- **Presets**: a busylight, a macOS notification on Attention, or a sound on
+  Attention. Any shell command works — a smart bulb via `curl`, a Stream Deck key,
+  a webhook…
+
+The aggregate uses its own urgency order — **Attention > Working > Ready > Idle >
+none** — so with several sessions the light goes red the moment *one* needs you,
+and off only when all end. It fires on change (debounced), and every fire is
+logged with its exit code to
+`~/Library/Application Support/CCStatusLight/callbacks.log` (self-rotating). Config
+lives next to it in `callbacks.json`; both are removed by the uninstall below.
+
+> Driving a busylight from the app **supersedes** per-event busylight hooks in
+> `~/.claude/settings.json` — remove those so they don't fight the app over the
+> one light.
 
 ## Uninstall — leaves zero residue
 

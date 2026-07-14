@@ -1,5 +1,10 @@
 # Roadmap — 0.2.0
 
+> **Status: shipped in v0.2.0.** All four phases (1a, 1b, 2a, 2b) landed. Cost
+> estimation and live rate-limit bars were investigated and deliberately omitted
+> (not reliably derivable from local data — see the notes below). The
+> pay-as-you-go API-key path remains backlog.
+
 Two features, planned. Target release **0.2.0**. Sequence: `1a → 1b → 2a → 2b`.
 
 ## Feature 1 — Claude status
@@ -81,6 +86,16 @@ from an **aggregate** state, defined generically so callbacks are configurable.
 
 - **2a — engine + JSON config** (busylight works headless).
 - **2b — Preferences UI.**
+
+## Backlog / future
+
+- **Real usage & cost for pay-as-you-go (API) accounts.** The Max *subscription*
+  rate-limit bars aren't reachable, but users on an **Anthropic API (Console)**
+  account could opt in by storing an **API key** locally; the documented
+  **Usage & Cost Admin API** (`/v1/organizations/usage_report/messages`,
+  `.../cost_report`) returns real per-model token usage and cost to draw bars
+  from. This is a *separate account/billing* from a Max subscription and would
+  not reproduce `/status`, so it's an opt-in for API users only — not a default.
 
 ## Open decisions
 
