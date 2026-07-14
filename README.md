@@ -40,6 +40,17 @@ Or just open `CCStatusLight.xcodeproj` in Xcode and press Run.
 `CCStatusLight.xcodeproj` is generated and git-ignored — always run
 `xcodegen generate` after cloning or editing `project.yml`.
 
+**Signing.** By default the app builds **ad-hoc** ("sign to run locally"), so no
+Apple Developer account is required. To build signed with your own team, create a
+git-ignored `Local.xcconfig` next to `Signing.xcconfig`:
+
+```
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+DEVELOPMENT_TEAM = XXXXXXXXXX
+CODE_SIGNING_REQUIRED = YES
+```
+
 ## Hooks
 
 The app only shows what the hooks report. Install them **opt-in**:

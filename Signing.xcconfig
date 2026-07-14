@@ -1,0 +1,24 @@
+// Signing configuration.
+//
+// Default: ad-hoc "sign to run locally" so anyone can build the app without an
+// Apple Developer account or team. This is what a fresh clone gets.
+//
+// To build signed with your own team (e.g. for a proper dev build), create a
+// git-ignored Local.xcconfig next to this file:
+//
+//     CODE_SIGN_STYLE = Automatic
+//     CODE_SIGN_IDENTITY = Apple Development
+//     DEVELOPMENT_TEAM = XXXXXXXXXX
+//     CODE_SIGNING_REQUIRED = YES
+//
+// (Release builds set Developer ID signing explicitly in scripts/release.sh and
+// don't rely on this file.)
+
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+CODE_SIGNING_REQUIRED = NO
+CODE_SIGNING_ALLOWED = YES
+DEVELOPMENT_TEAM =
+
+// Optional local override (git-ignored). The `?` makes it a no-op if absent.
+#include? "Local.xcconfig"

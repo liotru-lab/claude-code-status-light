@@ -1,8 +1,11 @@
 # CC Status Light — code conventions
 
-Code-level conventions for this repo only. Scope, anti-patterns, and constraints
-live in the hub `CLAUDE.md` one directory up (`../CLAUDE.md`) — this file must
-not contradict it.
+Code-level conventions for this repo. Higher-level product scope, anti-patterns,
+and constraints live in a separate hub document maintained by the maintainers.
+
+> Note: that hub document is **not released** and is **not available to clones or
+> forks** — it lives outside this repository. This file must stay consistent with
+> it, but you won't find it here.
 
 ## Project shape
 

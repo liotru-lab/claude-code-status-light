@@ -16,6 +16,9 @@ xcuserdata/
 *.xcodeproj/
 Sources/CCStatusLight/Info.plist
 
+# Local signing override (per-machine team; see Signing.xcconfig)
+Local.xcconfig
+
 # Swift Package Manager
 .swiftpm/
 .build/

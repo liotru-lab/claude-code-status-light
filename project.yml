@@ -18,6 +18,9 @@ targets:
     platform: macOS
     sources:
       - Sources/CCStatusLight
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
     info:
       path: Sources/CCStatusLight/Info.plist
       properties:
@@ -31,8 +34,7 @@ targets:
         PRODUCT_NAME: CCStatusLight
         PRODUCT_BUNDLE_IDENTIFIER: com.liotru-lab.claude-code-status-light
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # Signed with the Liotru ltd EOOD Apple Development team.
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: "38LKT4ZSN5"
+        # Signing is configured in Signing.xcconfig (ad-hoc by default; override
+        # the team via a git-ignored Local.xcconfig). Release uses Developer ID.
         ENABLE_HARDENED_RUNTIME: "NO"
         COMBINE_HIDPI_IMAGES: "YES"
