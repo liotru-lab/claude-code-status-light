@@ -22,6 +22,71 @@ struct CallbackConfig: Codable, Equatable {
         "idle": "busylight on green",
         "none": "busylight off",
     ])
+
+    /// State keys in aggregate-urgency order, for a stable editor layout.
+    static let orderedStates = ["notification", "working", "ready", "idle", "none"]
+
+    /// Ready-made command sets the Preferences UI can load. Busylight lights every
+    /// state; the notification/sound presets fire only on Attention (so you're
+    /// nudged when a session needs you, not on every transition).
+    static let presets: [(name: String, commands: [String: String])] = [
+        ("Busylight (all states)", example.commands),
+        ("macOS notification on Attention", [
+            "notification": "osascript -e 'display notification \"A session needs you\" with title \"Claude Code\"'",
+        ]),
+        ("Sound on Attention", [
+            "notification": "afplay /System/Library/Sounds/Glass.aiff",
+        ]),
+    ]
+
+    /// Replace {state} {color} {count} {name} in a command template.
+    static func substitute(_ command: String, state: String, count: Int, name: String) -> String {
+        var c = command
+        let color = colors[state] ?? state
+        for (t, v) in [("{state}", state), ("{color}", color), ("{count}", "\(count)"), ("{name}", name)] {
+            c = c.replacingOccurrences(of: t, with: v)
+        }
+        return c
+    }
+
+    static func load() -> CallbackConfig {
+        guard let data = try? Data(contentsOf: CallbackEngine.configURL),
+              let cfg = try? JSONDecoder().decode(CallbackConfig.self, from: data)
+        else { return CallbackConfig() }
+        return cfg
+    }
+
+    func write() {
+        let url = CallbackEngine.configURL
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let data = try? enc.encode(self) { try? data.write(to: url) }
+    }
+}
+
+/// Spawns a callback command via `/bin/bash -c`, with a PATH that includes
+/// ~/.local/bin (busylight) and Homebrew. Shared by the engine and the
+/// Preferences "Test" button. Runs off the main thread; `completion` gets the
+/// exit code (or -1 on launch failure) on an arbitrary queue.
+enum CallbackCommand {
+    static func run(_ command: String, completion: (@Sendable (Int32) -> Void)? = nil) {
+        DispatchQueue.global(qos: .utility).async {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/bash")
+            p.arguments = ["-c", command]
+            var env = ProcessInfo.processInfo.environment
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            env["PATH"] = "\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            p.environment = env
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            var code: Int32 = -1
+            do { try p.run(); p.waitUntilExit(); code = p.terminationStatus } catch { code = -1 }
+            completion?(code)
+        }
+    }
 }
 
 /// Runs a user-defined command when the *aggregate* session state changes, so a
@@ -47,7 +112,6 @@ final class CallbackEngine {
     private var configMTime: Date?
     private var lastFired: String?
     private var debounce: DispatchWorkItem?
-    private let queue = DispatchQueue(label: "net.liotru.ccstatuslight.callbacks")
 
     init() {
         writeExampleIfMissing()
@@ -92,39 +156,16 @@ final class CallbackEngine {
 
     private func fire(_ agg: String, count: Int, name: String) {
         lastFired = agg
-        guard var cmd = config.commands[agg], !cmd.isEmpty else {
+        guard let template = config.commands[agg], !template.isEmpty else {
             log("state=\(agg): no command configured — nothing to run")
             return
         }
-        let color = CallbackConfig.colors[agg] ?? agg
-        for (token, value) in [("{state}", agg), ("{color}", color),
-                               ("{count}", "\(count)"), ("{name}", name)] {
-            cmd = cmd.replacingOccurrences(of: token, with: value)
-        }
-        run(cmd, state: agg)
+        run(CallbackConfig.substitute(template, state: agg, count: count, name: name), state: agg)
     }
 
     private func run(_ command: String, state: String) {
-        queue.async { [weak self] in
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/bin/bash")
-            p.arguments = ["-c", command]
-            var env = ProcessInfo.processInfo.environment
-            // GUI apps inherit a minimal PATH; expose ~/.local/bin (busylight) etc.
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            env["PATH"] = "\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            p.environment = env
-            p.standardOutput = FileHandle.nullDevice
-            p.standardError = FileHandle.nullDevice
-            let result: String
-            do {
-                try p.run()
-                p.waitUntilExit()
-                result = "exit \(p.terminationStatus)"
-            } catch {
-                result = "launch failed: \(error.localizedDescription)"
-            }
-            self?.log("fired [\(state)] `\(command)` — \(result)")
+        CallbackCommand.run(command) { [weak self] code in
+            self?.log("fired [\(state)] `\(command)` — exit \(code)")
         }
     }
 

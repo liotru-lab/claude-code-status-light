@@ -43,8 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let environmentStore = EnvironmentStore()
     private let windowState = WindowState()
     private let callbackEngine = CallbackEngine()
+    private let callbackSettings = CallbackSettings()
     private var cancellables = Set<AnyCancellable>()
     private var window: NSWindow?
+    private var preferencesWindow: NSWindow?
 
     // Kept so the app submenu's `menuNeedsUpdate` can reflect live hook status.
     private var installHooksItem: NSMenuItem?
@@ -108,6 +110,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @objc func showPreferences(_ sender: Any?) {
+        if preferencesWindow == nil {
+            let hosting = NSHostingController(rootView: PreferencesView(settings: callbackSettings))
+            let w = NSWindow(contentViewController: hosting)
+            w.title = "Settings"
+            w.styleMask = [.titled, .closable]
+            w.isReleasedWhenClosed = false
+            w.center()
+            preferencesWindow = w
+        }
+        callbackSettings.reload()
+        preferencesWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     // MARK: - Menu & About
 
     private func setupMainMenu() {
@@ -125,6 +142,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let about = appMenu.addItem(withTitle: "About \(appName)",
                                     action: #selector(showAbout(_:)), keyEquivalent: "")
         about.target = self
+        appMenu.addItem(.separator())
+        let settings = appMenu.addItem(withTitle: "Settings…",
+                                       action: #selector(showPreferences(_:)), keyEquivalent: ",")
+        settings.target = self
         appMenu.addItem(.separator())
         let installItem = appMenu.addItem(withTitle: "Install Hooks…",
                                           action: #selector(installHooks(_:)), keyEquivalent: "")
