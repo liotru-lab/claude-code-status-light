@@ -77,7 +77,10 @@ new="$current"
 for pair in "${EVENTS[@]}"; do
   event="${pair%%:*}"
   state="${pair##*:}"
-  command="${HOOK} ${state}"
+  # Quote the script path: Claude Code runs the command through a shell, and the
+  # app-staged path contains a space ("Application Support"). Without quotes the
+  # shell splits it and the hook fails to launch.
+  command="\"${HOOK}\" ${state}"
 
   if [ "$mode" = "uninstall" ]; then
     # Drop any of our entries; then drop the event key if it went empty.
