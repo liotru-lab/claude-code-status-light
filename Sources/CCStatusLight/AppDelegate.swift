@@ -38,10 +38,14 @@ final class WindowState: ObservableObject {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = SessionStore()
     private let windowState = WindowState()
     private var window: NSWindow?
+
+    // Kept so the app submenu's `menuNeedsUpdate` can reflect live hook status.
+    private var installHooksItem: NSMenuItem?
+    private var uninstallHooksItem: NSMenuItem?
 
     private let appName = "CC Status Light"
 
@@ -96,6 +100,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
         appItem.submenu = appMenu
+        // We drive Install/Uninstall enablement + the checkmark ourselves in
+        // menuNeedsUpdate, so turn off automatic item enabling for this submenu.
+        appMenu.autoenablesItems = false
+        appMenu.delegate = self
 
         let about = appMenu.addItem(withTitle: "About \(appName)",
                                     action: #selector(showAbout(_:)), keyEquivalent: "")
@@ -104,9 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let installItem = appMenu.addItem(withTitle: "Install Hooks…",
                                           action: #selector(installHooks(_:)), keyEquivalent: "")
         installItem.target = self
+        installHooksItem = installItem
         let uninstallItem = appMenu.addItem(withTitle: "Uninstall Hooks…",
                                             action: #selector(uninstallHooks(_:)), keyEquivalent: "")
         uninstallItem.target = self
+        uninstallHooksItem = uninstallItem
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide \(appName)",
                         action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
@@ -133,18 +143,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func installHooks(_ sender: Any?) { runHookInstaller(uninstall: false) }
     @objc func uninstallHooks(_ sender: Any?) { runHookInstaller(uninstall: true) }
 
-    /// Live checkmark on "Install Hooks…" when installed; disable "Uninstall
-    /// Hooks…" when there's nothing to remove.
-    nonisolated func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        let installed = HookStatus.isInstalled
-        switch menuItem.action {
-        case #selector(installHooks(_:)):
-            menuItem.state = installed ? .on : .off
-            return true
-        case #selector(uninstallHooks(_:)):
-            return installed
-        default:
-            return true
+    /// Refresh the hook menu items just before the app submenu opens: a live
+    /// checkmark on "Install Hooks…" when installed, and "Uninstall Hooks…"
+    /// disabled when there's nothing to remove. Runs on the main thread (AppKit
+    /// menu delegate callback).
+    nonisolated func menuNeedsUpdate(_ menu: NSMenu) {
+        MainActor.assumeIsolated {
+            let installed = HookStatus.isInstalled
+            installHooksItem?.state = installed ? .on : .off
+            uninstallHooksItem?.isEnabled = installed
         }
     }
 
