@@ -29,9 +29,12 @@ case "$state" in
   *) echo "cc-status-light-hook: invalid state '${state}'" >&2; exit 2 ;;
 esac
 
+# jq is required to parse the hook payload and write the marker. If it's missing,
+# do nothing and exit cleanly — a status hook must never disrupt the Claude Code
+# session. (install-hooks.sh checks for jq up front, so this only trips if jq is
+# removed after install; the app simply shows no sessions.)
 if ! command -v jq >/dev/null 2>&1; then
-  echo "cc-status-light-hook: jq not found on PATH" >&2
-  exit 127
+  exit 0
 fi
 
 payload="$(cat || true)"
