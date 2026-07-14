@@ -31,10 +31,16 @@ struct CallbackConfig: Codable, Equatable {
 @MainActor
 final class CallbackEngine {
     /// ~/Library/Application Support/CCStatusLight/callbacks.json
-    static var configURL: URL {
+    nonisolated static var configURL: URL {
         SessionStore.stateDirectory
             .deletingLastPathComponent()            // …/CCStatusLight
             .appendingPathComponent("callbacks.json")
+    }
+
+    /// ~/Library/Application Support/CCStatusLight/callbacks.log — a rolling trace
+    /// of every fire (with the command's exit code) so behaviour is inspectable.
+    nonisolated static var logURL: URL {
+        configURL.deletingLastPathComponent().appendingPathComponent("callbacks.log")
     }
 
     private var config = CallbackConfig()
@@ -46,6 +52,7 @@ final class CallbackEngine {
     init() {
         writeExampleIfMissing()
         reloadIfChanged()
+        log("engine init — enabled=\(config.enabled)")
     }
 
     /// Aggregate urgency order for a single indicator.
@@ -85,17 +92,20 @@ final class CallbackEngine {
 
     private func fire(_ agg: String, count: Int, name: String) {
         lastFired = agg
-        guard var cmd = config.commands[agg], !cmd.isEmpty else { return }
+        guard var cmd = config.commands[agg], !cmd.isEmpty else {
+            log("state=\(agg): no command configured — nothing to run")
+            return
+        }
         let color = CallbackConfig.colors[agg] ?? agg
         for (token, value) in [("{state}", agg), ("{color}", color),
                                ("{count}", "\(count)"), ("{name}", name)] {
             cmd = cmd.replacingOccurrences(of: token, with: value)
         }
-        run(cmd)
+        run(cmd, state: agg)
     }
 
-    private func run(_ command: String) {
-        queue.async {
+    private func run(_ command: String, state: String) {
+        queue.async { [weak self] in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/bash")
             p.arguments = ["-c", command]
@@ -106,8 +116,47 @@ final class CallbackEngine {
             p.environment = env
             p.standardOutput = FileHandle.nullDevice
             p.standardError = FileHandle.nullDevice
-            try? p.run()
-            p.waitUntilExit()
+            let result: String
+            do {
+                try p.run()
+                p.waitUntilExit()
+                result = "exit \(p.terminationStatus)"
+            } catch {
+                result = "launch failed: \(error.localizedDescription)"
+            }
+            self?.log("fired [\(state)] `\(command)` — \(result)")
+        }
+    }
+
+    /// Rotate once the log passes this size, keeping the most recent lines.
+    private static let logMaxBytes = 128 * 1024
+    private static let logKeepLines = 400
+
+    /// Append a timestamped line to callbacks.log. Nonisolated: safe to call from
+    /// the command queue; each call opens/appends/closes. Self-rotating: when the
+    /// file exceeds `logMaxBytes` it's trimmed to the last `logKeepLines`.
+    nonisolated private func log(_ message: String) {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        guard let data = "\(stamp)  \(message)\n".data(using: .utf8) else { return }
+        let url = Self.logURL
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        // Rotate: keep only the recent tail once the file grows past the cap.
+        if let size = (try? fm.attributesOfItem(atPath: url.path)[.size]) as? Int,
+           size > Self.logMaxBytes,
+           let text = try? String(contentsOf: url, encoding: .utf8) {
+            let tail = text.split(separator: "\n", omittingEmptySubsequences: false)
+                .suffix(Self.logKeepLines).joined(separator: "\n")
+            try? tail.data(using: .utf8)?.write(to: url)
+        }
+
+        if let h = try? FileHandle(forWritingTo: url) {
+            defer { try? h.close() }
+            _ = try? h.seekToEnd()
+            try? h.write(contentsOf: data)
+        } else {
+            try? data.write(to: url)
         }
     }
 
@@ -120,7 +169,11 @@ final class CallbackEngine {
         configMTime = mtime
         if let data = try? Data(contentsOf: url),
            let cfg = try? JSONDecoder().decode(CallbackConfig.self, from: data) {
+            let wasEnabled = config.enabled
             config = cfg
+            if wasEnabled != config.enabled {
+                log("config reloaded — enabled=\(config.enabled)")
+            }
         }
     }
 
