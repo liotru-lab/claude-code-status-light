@@ -29,6 +29,26 @@ if let i = arguments.firstIndex(of: "--parse"), i + 1 < arguments.count {
     exit(0)
 }
 
+// Debug harness: `CCStatusLight --env` prints the account/lifetime-stats panel
+// data (read from ~/.claude.json and ~/.claude/stats-cache.json) and exits.
+if arguments.contains("--env") {
+    let e = EnvironmentStatus.load()
+    let out: [String: Any] = [
+        "email": e.email ?? "", "displayName": e.displayName ?? "",
+        "organization": e.organization ?? "", "role": e.role ?? "",
+        "planTier": e.planTier ?? "", "hasSubscription": e.hasSubscription ?? false,
+        "totalSessions": e.totalSessions ?? 0, "totalMessages": e.totalMessages ?? 0,
+        "longestSessionMessages": e.longestSessionMessages ?? 0,
+        "models": e.models.map { ["model": $0.model, "totalTokens": $0.totalTokens] },
+    ]
+    if let data = try? JSONSerialization.data(withJSONObject: out,
+                                              options: [.prettyPrinted, .sortedKeys]) {
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+    exit(0)
+}
+
 // Classic AppKit entry point. The app fully owns its NSWindow (created in
 // AppDelegate) so the POC's window rules — closing the window does not quit,
 // dock-click reopens, "Show on all Spaces" — are exact and not fighting a

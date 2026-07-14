@@ -40,6 +40,7 @@ final class WindowState: ObservableObject {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = SessionStore()
+    private let environmentStore = EnvironmentStore()
     private let windowState = WindowState()
     private var window: NSWindow?
 
@@ -70,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func makeWindow() {
         let root = ContentView()
             .environmentObject(store)
+            .environmentObject(environmentStore)
             .environmentObject(windowState)
 
         let hosting = NSHostingController(rootView: root)

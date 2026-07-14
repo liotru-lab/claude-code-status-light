@@ -16,8 +16,10 @@ extension SessionState {
 
 struct ContentView: View {
     @EnvironmentObject var store: SessionStore
+    @EnvironmentObject var environment: EnvironmentStore
     @EnvironmentObject var windowState: WindowState
     @State private var showLegend = false
+    @State private var showEnvironment = false
     @State private var expanded: Set<String> = []
 
     var body: some View {
@@ -91,6 +93,17 @@ struct ContentView: View {
                 .lineLimit(1)
                 .fixedSize()
             Button {
+                if !showEnvironment { environment.refresh() }
+                showEnvironment.toggle()
+            } label: {
+                Image(systemName: "person.crop.circle")
+            }
+            .buttonStyle(.borderless)
+            .help("Claude Code account & lifetime usage")
+            .popover(isPresented: $showEnvironment, arrowEdge: .bottom) {
+                EnvironmentView(status: environment.status)
+            }
+            Button {
                 showLegend.toggle()
             } label: {
                 Image(systemName: "questionmark.circle")
@@ -138,6 +151,81 @@ struct LegendView: View {
         .padding(14)
         .frame(width: 300)
     }
+}
+
+/// Account identity + lifetime usage (from ~/.claude.json + stats-cache.json).
+/// The live rate-limit bars from `/status` aren't shown — that data isn't
+/// stored locally (see `EnvironmentStatus`).
+struct EnvironmentView: View {
+    let status: EnvironmentStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !status.hasAny {
+                Text("No account data").font(.headline)
+                Text("Sign in to Claude Code so `~/.claude.json` is populated.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                account
+                Divider()
+                lifetime
+                if !status.models.isEmpty {
+                    Divider()
+                    byModel
+                }
+                Text("Live rate-limit usage isn't shown — Claude Code fetches it from Anthropic and it isn't stored on disk.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(width: 300)
+    }
+
+    private var account: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(status.displayName ?? status.email ?? "Account").font(.headline)
+            if status.displayName != nil, let e = status.email {
+                Text(e).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if let o = status.organization { row("Organization", o) }
+            if let r = status.role { row("Role", r.capitalized) }
+            if let p = status.planLabel { row("Plan", p) }
+        }
+    }
+
+    private var lifetime: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Lifetime").font(.subheadline.weight(.semibold))
+            if let s = status.totalSessions { row("Sessions", "\(s)") }
+            if let m = status.totalMessages { row("Messages", SessionDetailView.fmt(m)) }
+            if let d = status.memberSince { row("Since", Self.month.string(from: d)) }
+            if let l = status.longestSessionMessages { row("Longest", "\(l) messages") }
+        }
+    }
+
+    private var byModel: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Tokens by model").font(.subheadline.weight(.semibold))
+            ForEach(status.models.prefix(5)) { m in
+                row(SessionDetailView.friendlyModel(m.model), SessionDetailView.fmt(m.totalTokens))
+            }
+        }
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+                .frame(width: 96, alignment: .leading)
+            Text(value).font(.caption)
+            Spacer(minLength: 0)
+        }
+    }
+
+    static let month: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MMM yyyy"; return f
+    }()
 }
 
 struct SessionRow: View {
@@ -276,7 +364,8 @@ struct SessionDetailView: View {
             let k = Double(n) / 1000
             return k < 10 ? String(format: "%.1fk", k) : "\(Int(k.rounded()))k"
         }
-        return String(format: "%.1fM", Double(n) / 1_000_000)
+        if n < 1_000_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        return String(format: "%.1fB", Double(n) / 1_000_000_000)
     }
 
     /// "claude-opus-4-8" → "Opus 4.8"; falls back to a title-cased id.
