@@ -86,6 +86,24 @@ Prefer to wire it by hand? Add command hooks in `~/.claude/settings.json` that
 run `.../cc-status-light-hook.sh <state>` for each event above. Run
 `./hooks/install-hooks.sh --print` to see the exact JSON it would produce.
 
+## Distribution
+
+Tagged, **notarized** builds are published as
+[GitHub Releases](https://github.com/liotru-lab/claude-code-status-light/releases):
+download the zip, unzip, and move `CCStatusLight.app` to `/Applications`. Because
+they're signed with a Developer ID and notarized by Apple, they run without
+Gatekeeper warnings. Maintainers cut releases with `./scripts/release.sh` — see
+[RELEASE.md](RELEASE.md).
+
+**Mac App Store:** not offered. The app is intentionally **non-sandboxed** so it
+can read Claude Code's `~/.claude/projects/**` transcripts and share a state
+directory with the (outside-sandbox) hook. The App Store mandates the App
+Sandbox, which would redirect that shared directory into a private container and
+block reading `~/.claude` without explicit, user-granted folder access. Shipping
+on the App Store would therefore need an architectural rework (user-granted
+access via security-scoped bookmarks, and a redesigned hook↔app handoff) — noted
+as possible future work, not a near-term goal.
+
 ## Uninstall — leaves zero residue
 
 ```sh
