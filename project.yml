@@ -3,7 +3,7 @@ name: CCStatusLight
 options:
   bundleIdPrefix: com.liotru-lab
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "15.0"
   createIntermediateGroups: true
 
 settings:
@@ -31,7 +31,7 @@ targets:
       properties:
         CFBundleName: CCStatusLight
         CFBundleDisplayName: CC Status Light
-        LSMinimumSystemVersion: "14.0"
+        LSMinimumSystemVersion: "15.0"
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "Copyright © 2026 liotru-lab. MIT License."
     settings:

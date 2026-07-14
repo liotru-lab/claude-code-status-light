@@ -9,7 +9,8 @@ and constraints live in a separate hub document maintained by the maintainers.
 
 ## Project shape
 
-- Swift + SwiftUI, minimum macOS 14. Language mode: Swift 5 (`SWIFT_VERSION 5.0`).
+- Swift + SwiftUI, minimum macOS 15. Language mode: Swift 5 (`SWIFT_VERSION 5.0`).
+  (macOS 15 guarantees `/usr/bin/jq`, which the hook scripts rely on.)
 - Xcode project is **generated** from `project.yml` via XcodeGen. Never hand-edit
   `CCStatusLight.xcodeproj` — edit `project.yml` and run `xcodegen generate`.
   The `.xcodeproj` and the generated `Info.plist` are git-ignored.

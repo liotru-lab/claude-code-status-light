@@ -134,7 +134,7 @@ gh release create "$TAG" "$DIST" \
   --repo "$REPO" \
   --title "$DISPLAY $VERSION" \
   --verify-tag \
-  --notes "Notarized macOS build. Requires macOS 14+. Unzip and move CCStatusLight.app to /Applications."
+  --notes "Notarized macOS build. Requires macOS 15+. Unzip and move CCStatusLight.app to /Applications."
 
 step "Done"
 echo "Released $TAG → https://github.com/$REPO/releases/tag/$TAG"

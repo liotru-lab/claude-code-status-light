@@ -1,57 +1,71 @@
 # CC Status Light
 
-A tiny native macOS app that shows the status of your running Claude Code
-sessions in a single window. Proof of concept.
+A tiny native macOS app that shows what your running Claude Code sessions are
+doing — one row each, in a single window. Proof of concept.
 
-- Native macOS (Swift + SwiftUI, AppKit-managed window)
-- One window listing every known session with its name and current state
-- Closing the window does **not** quit the app — it keeps running and the
-  dock icon reopens the window
-- Optional **"Show on all Spaces"** toggle
-- **Hybrid discovery:** lightweight hooks mark which sessions are live (and point
-  at each transcript); the app tails the session's JSONL transcript to derive
-  accurate state — including **subagent awareness** (a session with running
-  subagents reads as *working*, not *idle*) and the real **session name**
-  (`custom-title` › `ai-title` › `slug`). The right-hand label shows live
-  activity (the current tool, `Thinking`, `Subagents`, `Compacting`, …).
+Native Swift + SwiftUI (AppKit-managed window), signed with a Developer ID and
+notarized.
 
-> Status: proof of concept — signed (Developer ID), notarized, and distributed as
-> GitHub Releases.
+## What it shows
+
+One row per session: its name, live state, the current activity when working
+(Editing, Reading, Running command, Thinking, Subagents, Compacting…), a subagent
+count, and the working directory.
+
+| State | Meaning |
+| ------ | ------- |
+| **Ready** | Session started, waiting for you |
+| **Working** | Actively running (tools, thinking, subagents, compacting) |
+| **Attention** | Needs you — a permission or elicitation prompt |
+| **Idle** | Finished its turn, nothing pending |
+| **Ended** | Session closed |
+
+State comes from tailing each session's JSONL transcript — including subagent
+awareness (a session with running subagents reads as *working*) and the real
+session name (`custom-title` › `ai-title` › `slug`). Lightweight hooks just mark
+which sessions are live.
+
+Closing the window keeps the app running in the background; the dock icon reopens
+it. There's an optional **Show on all Spaces** toggle.
 
 ## Install
 
-### Download (macOS)
+Requires **macOS 15+**.
 
-1. Download the latest `CC Status Light *.zip` from the
-   [Releases](https://github.com/liotru-lab/claude-code-status-light/releases) page.
-2. Unzip and move **CCStatusLight.app** to `/Applications`, then open it. It's
-   signed with a Developer ID and notarized, so it opens with no Gatekeeper warning.
-3. In the menu bar, choose **CC Status Light ▸ Install Hooks…** — this wires Claude
-   Code to report its sessions. It shows exactly what will change in
-   `~/.claude/settings.json`, backs the file up, and asks before writing. Requires
-   [`jq`](https://jqlang.github.io/jq/) (`brew install jq`).
-4. Start (or restart) a Claude Code session — it appears in the window.
+**1. Get the app.** Download the latest `CC Status Light *.zip` from
+[Releases](https://github.com/liotru-lab/claude-code-status-light/releases), unzip,
+and move **CCStatusLight.app** to `/Applications`. It's signed and notarized, so it
+opens with no Gatekeeper warning. (Or build it yourself — see below.)
 
-Remove the hooks anytime with **CC Status Light ▸ Uninstall Hooks…**.
+**2. Wire up the hooks.** Run the installer — it shows exactly what will change in
+`~/.claude/settings.json`, backs the file up, and asks before writing:
 
-### Build from source
+```sh
+./hooks/install-hooks.sh          # --uninstall to remove · --diff to preview · -y to skip the prompt
+```
 
-Requires macOS 14+, Xcode 16+ (tested on 26),
-[`xcodegen`](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), and
-[`jq`](https://jqlang.github.io/jq/) (`brew install jq`).
+No terminal handy? Use the app's **CC Status Light ▸ Install Hooks…** menu instead
+— same diff-and-confirm flow, with the scripts bundled inside the app.
+
+**3. Start (or restart) a Claude Code session** — it appears in the window.
+
+## Build from source
+
+Requires macOS 15+, Xcode 16+ (tested on 26), and
+[XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
 xcodegen generate            # regenerate CCStatusLight.xcodeproj from project.yml
 xcodebuild -project CCStatusLight.xcodeproj -target CCStatusLight -configuration Debug build
 ```
 
-Or open `CCStatusLight.xcodeproj` in Xcode and press Run. The `.xcodeproj` is
-generated and git-ignored — re-run `xcodegen generate` after cloning or editing
-`project.yml`.
+Or open the generated `CCStatusLight.xcodeproj` in Xcode and press Run. The
+`.xcodeproj` is generated and git-ignored — re-run `xcodegen generate` after
+cloning or editing `project.yml`.
 
-By default the app builds **ad-hoc** ("sign to run locally"), so no Apple
-Developer account is needed. To sign with your own team, create a git-ignored
-`Local.xcconfig` next to `Signing.xcconfig`:
+By default it builds **ad-hoc** ("sign to run locally"), so no Apple Developer
+account is needed. To sign with your own team, add a git-ignored `Local.xcconfig`
+next to `Signing.xcconfig`:
 
 ```
 CODE_SIGN_STYLE = Automatic
@@ -60,85 +74,44 @@ DEVELOPMENT_TEAM = XXXXXXXXXX
 CODE_SIGNING_REQUIRED = YES
 ```
 
-## Hooks
-
-The app only shows what the hooks report. The easiest way to install them is the
-app's **CC Status Light ▸ Install Hooks…** menu (see [Install](#install)) — it
-copies the bundled scripts to `~/Library/Application Support/CCStatusLight/hooks/`
-and wires them up.
-
-Prefer the command line (e.g. when building from source)? Run the installer
-directly — it shows a diff of `~/.claude/settings.json`, backs it up, and asks
-before writing:
-
-```sh
-./hooks/install-hooks.sh              # --uninstall to remove · -y to skip the prompt · --diff to preview
-```
-
-Either way, this wires these Claude Code hook events to `cc-status-light-hook.sh`:
-
-| Hook event         | State written  |
-| ------------------ | -------------- |
-| `SessionStart`     | `ready`        |
-| `UserPromptSubmit` | `working`      |
-| `PostToolUse`      | `working`      |
-| `Notification`     | `idle` if it's a waiting nudge (`idle_prompt`); `notification` for permission/elicitation prompts |
-| `PermissionRequest`| `notification` |
-| `Stop`             | `idle`         |
-
-The `Notification` event is overloaded — Claude Code fires it both when a session
-is just waiting for you and when it genuinely needs attention. The hook inspects
-the payload's `notification_type` so a plain waiting nudge reads as calm `idle`,
-and only real permission/elicitation prompts turn the row red.
-| `SessionEnd`       | `ended`        |
-
-The hook writes one file per session:
-
-```
-~/Library/Application Support/CCStatusLight/state/<session-id>.json
-```
-
-```json
-{
-  "session_id": "e901f0eb-…",
-  "state": "working",
-  "cwd": "/Users/you/Projects/foo",
-  "event": "UserPromptSubmit",
-  "timestamp": "2026-07-13T20:39:55Z"
-}
-```
-
-Prefer to wire it by hand? Add command hooks in `~/.claude/settings.json` that
-run `.../cc-status-light-hook.sh <state>` for each event above. Run
-`./hooks/install-hooks.sh --print` to see the exact JSON it would produce.
-
-## Distribution
-
-Tagged, **notarized** builds are published as
-[GitHub Releases](https://github.com/liotru-lab/claude-code-status-light/releases):
-download the zip, unzip, and move `CCStatusLight.app` to `/Applications`. Because
-they're signed with a Developer ID and notarized by Apple, they run without
-Gatekeeper warnings. Maintainers cut releases with `./scripts/release.sh` — see
+Maintainers cut notarized releases with `./scripts/release.sh` — see
 [RELEASE.md](RELEASE.md).
 
-**Mac App Store:** not offered. The app is intentionally **non-sandboxed** so it
-can read Claude Code's `~/.claude/projects/**` transcripts and share a state
-directory with the (outside-sandbox) hook. The App Store mandates the App
-Sandbox, which would redirect that shared directory into a private container and
-block reading `~/.claude` without explicit, user-granted folder access. Shipping
-on the App Store would therefore need an architectural rework (user-granted
-access via security-scoped bookmarks, and a redesigned hook↔app handoff) — noted
-as possible future work, not a near-term goal.
+## How the hooks work
+
+`install-hooks.sh` wires these Claude Code events to `cc-status-light-hook.sh`,
+which writes one marker file per session to
+`~/Library/Application Support/CCStatusLight/state/<session-id>.json`:
+
+| Hook event | Fallback state |
+| ---------- | -------------- |
+| `SessionStart` | `ready` |
+| `UserPromptSubmit`, `PostToolUse` | `working` |
+| `Notification` | `idle` for a waiting nudge; `notification` for a permission/elicitation prompt |
+| `PermissionRequest` | `notification` |
+| `Stop` | `idle` |
+| `SessionEnd` | `ended` |
+
+These per-event states are only a fallback — the app prefers the transcript. The
+`Notification` event is overloaded (Claude Code fires it both when just waiting for
+you and when it genuinely needs attention), so the hook inspects the payload's
+`notification_type`: a plain waiting nudge stays calm `idle`, and only real
+permission/elicitation prompts turn the row red.
+
+`install-hooks.sh` is the only thing that writes `~/.claude/settings.json`. It's
+idempotent, backs up first, and `--uninstall` removes only our own entries —
+leaving any other hooks (e.g. a busylight) untouched. It never writes
+`~/.claude.json`, never registers a plugin, never installs a LaunchAgent.
 
 ## Uninstall — leaves zero residue
 
 ```sh
-./hooks/install-hooks.sh --uninstall            # removes only our hook entries
-rm -rf "$HOME/Library/Application Support/CCStatusLight"   # state + prefs dir
-rm -rf CCStatusLight.app                         # or wherever you copied it
+./hooks/install-hooks.sh --uninstall                        # remove our hook entries
+rm -rf "$HOME/Library/Application Support/CCStatusLight"     # state + staged scripts
+rm -rf /Applications/CCStatusLight.app
 ```
 
-That's everything. No plugin, no LaunchAgent, no writes to `~/.claude.json`.
+That's everything.
 
 ## License
 
