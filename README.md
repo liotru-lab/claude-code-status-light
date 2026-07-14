@@ -1,10 +1,9 @@
 # CC Status Light
 
 A tiny native macOS app that shows what your running Claude Code sessions are
-doing — one row each, in a single window. Proof of concept.
+doing — one row each, in a single window.
 
-Native Swift + SwiftUI (AppKit-managed window), signed with a Developer ID and
-notarized.
+Native Swift + SwiftUI (AppKit-managed window).
 
 ## What it shows
 
@@ -32,20 +31,31 @@ it. There's an optional **Show on all Spaces** toggle.
 
 Requires **macOS 15+**.
 
-**1. Get the app.** Download the latest `CC Status Light *.zip` from
-[Releases](https://github.com/liotru-lab/claude-code-status-light/releases), unzip,
-and move **CCStatusLight.app** to `/Applications`. It's signed and notarized, so it
-opens with no Gatekeeper warning. (Or build it yourself — see below.)
+**1. Get the app** — one line, installs to `/Applications`:
 
-**2. Wire up the hooks.** Run the installer — it shows exactly what will change in
-`~/.claude/settings.json`, backs the file up, and asks before writing:
+```sh
+curl -fsSL https://raw.githubusercontent.com/liotru-lab/claude-code-status-light/main/install.sh | bash
+```
+
+It downloads the latest notarized build and moves **CCStatusLight.app** into
+`/Applications`. Because it's fetched with `curl` (not a browser) the app isn't
+quarantined, so it opens with no Gatekeeper prompt.
+
+Prefer to do it by hand? Grab the latest `CC Status Light *.zip` from
+[Releases](https://github.com/liotru-lab/claude-code-status-light/releases), unzip,
+and move `CCStatusLight.app` to `/Applications` yourself. (Or build it — see below.)
+
+**2. Wire up the hooks.** From a source checkout, run the installer — it shows
+exactly what will change in `~/.claude/settings.json`, backs the file up, and asks
+before writing:
 
 ```sh
 ./hooks/install-hooks.sh          # --uninstall to remove · --diff to preview · -y to skip the prompt
 ```
 
-No terminal handy? Use the app's **CC Status Light ▸ Install Hooks…** menu instead
-— same diff-and-confirm flow, with the scripts bundled inside the app.
+Installed the app via the one-liner (no checkout)? Use its
+**CC Status Light ▸ Install Hooks…** menu instead — same diff-and-confirm flow,
+with the scripts bundled inside the app.
 
 **3. Start (or restart) a Claude Code session** — it appears in the window.
 
