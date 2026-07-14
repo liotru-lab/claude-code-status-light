@@ -27,7 +27,9 @@ and constraints live in a separate hub document maintained by the maintainers.
   - "Show on all Spaces" flips `NSWindow.collectionBehavior.canJoinAllSpaces`
     (see `WindowState`), persisted in `UserDefaults`.
 - Keep view state in small `@MainActor` `ObservableObject`s (`SessionStore`,
-  `WindowState`).
+  `WindowState`, `EnvironmentStore`, `CallbackSettings`).
+- A second `NSWindow` (Preferences, ⌘,) is created lazily in `AppDelegate`,
+  hosting `PreferencesView` — same NSHostingController pattern as the main window.
 
 ## Session state — hybrid (hooks for liveness, JSONL for state)
 
@@ -50,6 +52,39 @@ and constraints live in a separate hub document maintained by the maintainers.
   transcript. Verify the parser with `CCStatusLight --parse <transcript.jsonl>`.
 - The per-event hook `state` values are now only a fallback (used if the transcript
   can't be read). Keep the hook's states and `SessionState` in sync.
+
+## Status detail & account panel
+
+- `TranscriptParser` also captures per-session detail — `model`, Claude Code
+  `version`, `gitBranch`, `permissionMode`, `contextTokens` (point-in-time context
+  window in use) — exposed as `SessionDetail` (`Session.swift`) and shown in an
+  **expandable row** (`SessionDetailView`). A cumulative **cost** estimate was
+  tried and removed: Claude Code writes one message as several JSONL lines and
+  bills from a source the transcript doesn't reproduce, so it couldn't be
+  reconciled with `/status`. Don't re-add a transcript-derived cost.
+- `EnvironmentStatus`/`EnvironmentStore` read (**read-only**) `~/.claude.json`
+  (`oauthAccount`) and `~/.claude/stats-cache.json` for the footer **account
+  panel** (`EnvironmentView`): identity + lifetime usage. Never write those files,
+  never surface tokens. The live `/status` rate-limit bars are **not** available
+  locally (server-side; the account token is Keychain-locked) — don't attempt them.
+- Debug harnesses: `CCStatusLight --parse <transcript.jsonl>` (state + detail) and
+  `CCStatusLight --env` (account panel data).
+
+## Callbacks (aggregate state → command)
+
+- `CallbackEngine` (@MainActor) subscribes to `SessionStore.$sessions`, derives one
+  **aggregate** state with its own urgency order — **Attention > Working > Ready >
+  Idle > none** (distinct from the list-sort priority) — and runs a user command on
+  change, debounced ~400ms. `CallbackCommand` is the shared runner (`/bin/bash -c`,
+  PATH includes `~/.local/bin` so `busylight` resolves), used by the engine and the
+  Preferences **Test** button. Placeholders: `{state} {color} {count} {name}`.
+- Config is `CallbackConfig` at
+  `~/Library/Application Support/CCStatusLight/callbacks.json` (our dir → clean
+  uninstall), **disabled by default**; a rotating fire log sits next to it at
+  `callbacks.log`. The engine reloads on mtime change. `CallbackSettings` +
+  `PreferencesView` edit it (auto-save). Presets: busylight, notification, sound.
+- Same anti-patterns hold: never write `~/.claude.json`/`settings.json`, no
+  LaunchAgent. Callback commands are user-defined (like hooks).
 
 ## Hooks
 
