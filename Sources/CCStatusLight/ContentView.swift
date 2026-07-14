@@ -251,10 +251,18 @@ struct SessionDetailView: View {
             if let m = detail.model { field("Model", Self.friendlyModel(m)) }
             if let v = detail.ccVersion { field("Claude Code", v) }
             if let b = detail.gitBranch { field("Branch", Self.friendlyBranch(b)) }
-            if let tokens = tokenSummary { field("Tokens", tokens) }
             if let pm = detail.permissionMode { field("Mode", Self.friendlyMode(pm)) }
+            if let c = detail.contextTokens { field("Context", "~\(Self.fmt(c)) in use") }
+            if let cost = costSummary { field("Cost", cost) }
         }
         .font(.caption)
+    }
+
+    /// "~$0.42 est. · 1.2M tokens" — a list-price estimate; nil if unpriceable.
+    private var costSummary: String? {
+        guard let usd = detail.estimatedCostUSD else { return nil }
+        let dollars = usd < 0.01 ? "<$0.01" : String(format: "$%.2f", usd)
+        return "~\(dollars) est. · \(Self.fmt(detail.totalTokens)) tokens"
     }
 
     private func field(_ label: String, _ value: String) -> some View {
@@ -269,19 +277,14 @@ struct SessionDetailView: View {
         }
     }
 
-    /// "~194k ctx · 2.9k out" from the token counts.
-    private var tokenSummary: String? {
-        var parts: [String] = []
-        if let c = detail.contextTokens { parts.append("~\(Self.fmt(c)) ctx") }
-        if let o = detail.outputTokens { parts.append("\(Self.fmt(o)) out") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    /// 193591 → "194k", 2859 → "2.9k", 640 → "640".
+    /// 193591 → "194k", 2859 → "2.9k", 640 → "640", 1_200_000 → "1.2M".
     static func fmt(_ n: Int) -> String {
         if n < 1000 { return "\(n)" }
-        let k = Double(n) / 1000
-        return k < 10 ? String(format: "%.1fk", k) : "\(Int(k.rounded()))k"
+        if n < 1_000_000 {
+            let k = Double(n) / 1000
+            return k < 10 ? String(format: "%.1fk", k) : "\(Int(k.rounded()))k"
+        }
+        return String(format: "%.1fM", Double(n) / 1_000_000)
     }
 
     /// "claude-opus-4-8" → "Opus 4.8"; falls back to a title-cased id.
