@@ -82,6 +82,16 @@ from an **aggregate** state, defined generically so callbacks are configurable.
 - **2a — engine + JSON config** (busylight works headless).
 - **2b — Preferences UI.**
 
+## Backlog / future
+
+- **Real usage & cost for pay-as-you-go (API) accounts.** The Max *subscription*
+  rate-limit bars aren't reachable, but users on an **Anthropic API (Console)**
+  account could opt in by storing an **API key** locally; the documented
+  **Usage & Cost Admin API** (`/v1/organizations/usage_report/messages`,
+  `.../cost_report`) returns real per-model token usage and cost to draw bars
+  from. This is a *separate account/billing* from a Max subscription and would
+  not reproduce `/status`, so it's an opt-in for API users only — not a default.
+
 ## Open decisions
 
 1. Busylight urgency order — confirm **Attention beats Working** for the light.
