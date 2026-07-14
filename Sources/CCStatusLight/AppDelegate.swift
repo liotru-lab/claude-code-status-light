@@ -38,7 +38,7 @@ final class WindowState: ObservableObject {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let store = SessionStore()
     private let windowState = WindowState()
     private var window: NSWindow?
@@ -130,8 +130,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Hook installation
 
-    @objc private func installHooks(_ sender: Any?) { runHookInstaller(uninstall: false) }
-    @objc private func uninstallHooks(_ sender: Any?) { runHookInstaller(uninstall: true) }
+    @objc func installHooks(_ sender: Any?) { runHookInstaller(uninstall: false) }
+    @objc func uninstallHooks(_ sender: Any?) { runHookInstaller(uninstall: true) }
+
+    /// Live checkmark on "Install Hooks…" when installed; disable "Uninstall
+    /// Hooks…" when there's nothing to remove.
+    nonisolated func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        let installed = HookStatus.isInstalled
+        switch menuItem.action {
+        case #selector(installHooks(_:)):
+            menuItem.state = installed ? .on : .off
+            return true
+        case #selector(uninstallHooks(_:)):
+            return installed
+        default:
+            return true
+        }
+    }
 
     /// Writable copy of the bundled hook scripts:
     /// ~/Library/Application Support/CCStatusLight/hooks

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 extension SessionState {
     /// Status colour. ready=blue, working=yellow, notification=red, idle=green, ended=gray.
@@ -34,17 +35,34 @@ struct ContentView: View {
         .frame(minWidth: 200, minHeight: 200)
     }
 
+    @ViewBuilder
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "moon.zzz")
-                .font(.system(size: 28))
-                .foregroundStyle(.secondary)
-            Text("No sessions yet")
-                .font(.headline)
-            Text("Install the hooks, then start a Claude Code session.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if store.hooksInstalled {
+                Image(systemName: "moon.zzz")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.secondary)
+                Text("No active sessions")
+                    .font(.headline)
+                Text("Start a Claude Code session and it'll appear here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Image(systemName: "link.badge.plus")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.secondary)
+                Text("Hooks not installed")
+                    .font(.headline)
+                Text("Wire up Claude Code so it reports its sessions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Install Hooks…") {
+                    NSApp.sendAction(#selector(AppDelegate.installHooks(_:)), to: nil, from: nil)
+                }
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()

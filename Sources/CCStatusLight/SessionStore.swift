@@ -148,6 +148,7 @@ final class SessionScanner {
 @MainActor
 final class SessionStore: ObservableObject {
     @Published private(set) var sessions: [Session] = []
+    @Published private(set) var hooksInstalled: Bool = HookStatus.isInstalled
 
     nonisolated static var stateDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
@@ -174,6 +175,7 @@ final class SessionStore: ObservableObject {
     deinit { timer?.invalidate() }
 
     func refresh() {
+        hooksInstalled = HookStatus.isInstalled
         scanner.scan { [weak self] sessions in
             self?.sessions = sessions
         }
