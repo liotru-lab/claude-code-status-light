@@ -26,6 +26,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="${SCRIPT_DIR}/cc-status-light-hook.sh"
 SETTINGS="${CLAUDE_SETTINGS:-${HOME}/.claude/settings.json}"
 
+# We identify our own hook entries by the script name, not the full path, so
+# uninstall/refresh works regardless of where the hook was installed from (dev
+# repo checkout vs. the app-staged ~/Library copy). Matches HookStatus.isInstalled.
+MARKER="cc-status-light-hook"
+
 # hook event -> state written
 EVENTS=(
   "SessionStart:ready"
@@ -77,20 +82,21 @@ for pair in "${EVENTS[@]}"; do
   if [ "$mode" = "uninstall" ]; then
     # Drop any of our entries; then drop the event key if it went empty.
     new="$(jq \
-      --arg ev "$event" --arg hook "$HOOK" '
+      --arg ev "$event" --arg marker "$MARKER" '
       if (.hooks[$ev]?) then
         .hooks[$ev] |= map(select([ (.hooks // [])[].command ]
-                            | any(startswith($hook)) | not))
+                            | any(contains($marker)) | not))
       else . end
       | if (.hooks[$ev]? | length) == 0 then del(.hooks[$ev]) else . end
     ' <<<"$new")"
   else
-    # Idempotent add: strip our previous entry for this event, then append.
+    # Idempotent add: strip any prior entry of ours for this event (regardless
+    # of where it was installed from), then append the current path.
     new="$(jq \
-      --arg ev "$event" --arg hook "$HOOK" --arg cmd "$command" '
+      --arg ev "$event" --arg marker "$MARKER" --arg cmd "$command" '
       .hooks[$ev] = ((.hooks[$ev] // [])
         | map(select([ (.hooks // [])[].command ]
-                     | any(startswith($hook)) | not)))
+                     | any(contains($marker)) | not)))
         + [ { matcher: "", hooks: [ { type: "command", command: $cmd } ] } ]
     ' <<<"$new")"
   fi
