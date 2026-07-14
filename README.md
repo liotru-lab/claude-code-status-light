@@ -15,34 +15,43 @@ sessions in a single window. Proof of concept.
   (`custom-title` › `ai-title` › `slug`). The right-hand label shows live
   activity (the current tool, `Thinking`, `Subagents`, `Compacting`, …).
 
-> Status: POC. Not signed, not notarized, not distributed.
+> Status: proof of concept — signed (Developer ID), notarized, and distributed as
+> GitHub Releases.
 
-## Requirements
+## Install
 
-- macOS 14 (Sonoma) or later
-- Xcode 16+ (built and tested with Xcode 26)
-- [`xcodegen`](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`
-- [`jq`](https://jqlang.github.io/jq/) — `brew install jq` (used by the hook)
+### Download (macOS)
 
-## Build & run
+1. Download the latest `CC Status Light *.zip` from the
+   [Releases](https://github.com/liotru-lab/claude-code-status-light/releases) page.
+2. Unzip and move **CCStatusLight.app** to `/Applications`, then open it. It's
+   signed with a Developer ID and notarized, so it opens with no Gatekeeper warning.
+3. In the menu bar, choose **CC Status Light ▸ Install Hooks…** — this wires Claude
+   Code to report its sessions. It shows exactly what will change in
+   `~/.claude/settings.json`, backs the file up, and asks before writing. Requires
+   [`jq`](https://jqlang.github.io/jq/) (`brew install jq`).
+4. Start (or restart) a Claude Code session — it appears in the window.
+
+Remove the hooks anytime with **CC Status Light ▸ Uninstall Hooks…**.
+
+### Build from source
+
+Requires macOS 14+, Xcode 16+ (tested on 26),
+[`xcodegen`](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), and
+[`jq`](https://jqlang.github.io/jq/) (`brew install jq`).
 
 ```sh
-xcodegen generate                 # regenerates CCStatusLight.xcodeproj from project.yml
-xcodebuild -project CCStatusLight.xcodeproj \
-           -target CCStatusLight -configuration Debug build
-open "$(xcodebuild -project CCStatusLight.xcodeproj -target CCStatusLight \
-        -configuration Debug -showBuildSettings \
-        | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$2} / FULL_PRODUCT_NAME /{n=$2} END{print d"/"n}')"
+xcodegen generate            # regenerate CCStatusLight.xcodeproj from project.yml
+xcodebuild -project CCStatusLight.xcodeproj -target CCStatusLight -configuration Debug build
 ```
 
-Or just open `CCStatusLight.xcodeproj` in Xcode and press Run.
+Or open `CCStatusLight.xcodeproj` in Xcode and press Run. The `.xcodeproj` is
+generated and git-ignored — re-run `xcodegen generate` after cloning or editing
+`project.yml`.
 
-`CCStatusLight.xcodeproj` is generated and git-ignored — always run
-`xcodegen generate` after cloning or editing `project.yml`.
-
-**Signing.** By default the app builds **ad-hoc** ("sign to run locally"), so no
-Apple Developer account is required. To build signed with your own team, create a
-git-ignored `Local.xcconfig` next to `Signing.xcconfig`:
+By default the app builds **ad-hoc** ("sign to run locally"), so no Apple
+Developer account is needed. To sign with your own team, create a git-ignored
+`Local.xcconfig` next to `Signing.xcconfig`:
 
 ```
 CODE_SIGN_STYLE = Automatic
@@ -53,14 +62,20 @@ CODE_SIGNING_REQUIRED = YES
 
 ## Hooks
 
-The app only shows what the hooks report. Install them **opt-in**:
+The app only shows what the hooks report. The easiest way to install them is the
+app's **CC Status Light ▸ Install Hooks…** menu (see [Install](#install)) — it
+copies the bundled scripts to `~/Library/Application Support/CCStatusLight/hooks/`
+and wires them up.
+
+Prefer the command line (e.g. when building from source)? Run the installer
+directly — it shows a diff of `~/.claude/settings.json`, backs it up, and asks
+before writing:
 
 ```sh
-./hooks/install-hooks.sh          # shows a diff of ~/.claude/settings.json,
-                                  # backs it up, then asks before writing
+./hooks/install-hooks.sh              # --uninstall to remove · -y to skip the prompt · --diff to preview
 ```
 
-This wires six Claude Code hook events to `hooks/cc-status-light-hook.sh`:
+Either way, this wires these Claude Code hook events to `cc-status-light-hook.sh`:
 
 | Hook event         | State written  |
 | ------------------ | -------------- |

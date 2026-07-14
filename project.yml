@@ -18,6 +18,11 @@ targets:
     platform: macOS
     sources:
       - Sources/CCStatusLight
+      # Bundle the hook scripts into Contents/Resources/hooks so the app can
+      # install them itself (see AppDelegate "Install Hooks…").
+      - path: hooks
+        type: folder
+        buildPhase: resources
     configFiles:
       Debug: Signing.xcconfig
       Release: Signing.xcconfig

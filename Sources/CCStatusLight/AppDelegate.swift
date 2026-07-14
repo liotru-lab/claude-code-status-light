@@ -101,6 +101,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                     action: #selector(showAbout(_:)), keyEquivalent: "")
         about.target = self
         appMenu.addItem(.separator())
+        let installItem = appMenu.addItem(withTitle: "Install Hooks…",
+                                          action: #selector(installHooks(_:)), keyEquivalent: "")
+        installItem.target = self
+        let uninstallItem = appMenu.addItem(withTitle: "Uninstall Hooks…",
+                                            action: #selector(uninstallHooks(_:)), keyEquivalent: "")
+        uninstallItem.target = self
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide \(appName)",
                         action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
@@ -119,6 +126,123 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.windowsMenu = windowMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    // MARK: - Hook installation
+
+    @objc private func installHooks(_ sender: Any?) { runHookInstaller(uninstall: false) }
+    @objc private func uninstallHooks(_ sender: Any?) { runHookInstaller(uninstall: true) }
+
+    /// Writable copy of the bundled hook scripts:
+    /// ~/Library/Application Support/CCStatusLight/hooks
+    private var hooksDir: URL {
+        SessionStore.stateDirectory
+            .deletingLastPathComponent()                       // …/CCStatusLight
+            .appendingPathComponent("hooks", isDirectory: true)
+    }
+
+    /// Copy the bundled scripts to the writable hooks dir (executable). Returns
+    /// the path to install-hooks.sh, or nil if the bundled scripts are missing.
+    private func stageHookScripts() -> URL? {
+        guard let bundled = Bundle.main.resourceURL?
+            .appendingPathComponent("hooks", isDirectory: true) else { return nil }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: hooksDir, withIntermediateDirectories: true)
+        for name in ["install-hooks.sh", "cc-status-light-hook.sh"] {
+            let src = bundled.appendingPathComponent(name)
+            let dst = hooksDir.appendingPathComponent(name)
+            guard fm.fileExists(atPath: src.path) else { return nil }
+            try? fm.removeItem(at: dst)
+            do { try fm.copyItem(at: src, to: dst) } catch { return nil }
+            try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dst.path)
+        }
+        return hooksDir.appendingPathComponent("install-hooks.sh")
+    }
+
+    /// Run install-hooks.sh with args; returns (exit code, combined output).
+    private func runInstaller(_ script: URL, _ args: [String]) -> (Int32, String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/bash")
+        p.arguments = [script.path] + args
+        var env = ProcessInfo.processInfo.environment
+        // GUI apps inherit a minimal PATH; make common tool locations (jq) visible.
+        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        p.environment = env
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        do { try p.run() } catch {
+            return (-1, "Failed to launch installer: \(error.localizedDescription)")
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()   // drains until EOF
+        p.waitUntilExit()
+        return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+    }
+
+    private func runHookInstaller(uninstall: Bool) {
+        guard let script = stageHookScripts() else {
+            showAlert(.critical, "Hook scripts not found",
+                      "Couldn't locate the bundled hook scripts to install.")
+            return
+        }
+        let verb = uninstall ? "Uninstall" : "Install"
+        let base = uninstall ? ["--uninstall"] : []
+
+        // 1) Compute the diff without writing.
+        let (_, diffOut) = runInstaller(script, base + ["--diff"])
+        let diff = diffOut.trimmingCharacters(in: .whitespacesAndNewlines)
+        if diff.isEmpty || diff.contains("Nothing to change") {
+            showAlert(.informational, "Nothing to change",
+                      uninstall ? "The hooks aren't installed."
+                                : "The hooks are already installed and up to date.")
+            return
+        }
+
+        // 2) Confirm, showing exactly what changes.
+        let alert = NSAlert()
+        alert.messageText = "\(verb) CC Status Light hooks?"
+        alert.informativeText = "This edits ~/.claude/settings.json "
+            + "(a timestamped backup is made first). Review the change:"
+        alert.addButton(withTitle: verb)
+        alert.addButton(withTitle: "Cancel")
+        alert.accessoryView = diffView(diff)
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        // 3) Apply.
+        let (code, out) = runInstaller(script, base + ["--yes"])
+        if code == 0 {
+            showAlert(.informational, "\(verb) complete",
+                      uninstall ? "Hooks removed. Ended sessions will clear shortly."
+                                : "Hooks installed. Start (or restart) a Claude Code "
+                                  + "session and it will appear here.")
+        } else {
+            showAlert(.critical, "\(verb) failed",
+                      out.isEmpty ? "The installer exited with code \(code)." : out)
+        }
+    }
+
+    private func diffView(_ text: String) -> NSScrollView {
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 460, height: 240))
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        let tv = NSTextView(frame: scroll.bounds)
+        tv.isEditable = false
+        tv.isVerticallyResizable = true
+        tv.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        tv.textContainerInset = NSSize(width: 4, height: 4)
+        tv.string = text
+        scroll.documentView = tv
+        return scroll
+    }
+
+    private func showAlert(_ style: NSAlert.Style, _ title: String, _ text: String) {
+        let a = NSAlert()
+        a.alertStyle = style
+        a.messageText = title
+        a.informativeText = text
+        NSApp.activate(ignoringOtherApps: true)
+        a.runModal()
     }
 
     @objc private func showAbout(_ sender: Any?) {
