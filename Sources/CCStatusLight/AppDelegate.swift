@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = SessionStore()
     private let environmentStore = EnvironmentStore()
     private let windowState = WindowState()
+    private let callbackEngine = CallbackEngine()
+    private var cancellables = Set<AnyCancellable>()
     private var window: NSWindow?
 
     // Kept so the app submenu's `menuNeedsUpdate` can reflect live hook status.
@@ -54,6 +56,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupMainMenu()
         makeWindow()
         showWindow()
+
+        // Drive user-defined callbacks (e.g. a busylight) from the aggregate
+        // session state. Emits on the main actor (SessionStore is @MainActor).
+        store.$sessions
+            .sink { [weak self] sessions in
+                MainActor.assumeIsolated { self?.callbackEngine.update(sessions) }
+            }
+            .store(in: &cancellables)
+    }
+
+    // Turn the indicator off (fire the "none" callback) when quitting.
+    func applicationWillTerminate(_ notification: Notification) {
+        callbackEngine.fireClear()
     }
 
     // Closing the window must not quit the app — it keeps reading state in the
