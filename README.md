@@ -5,6 +5,8 @@ doing — one row each, in a single window.
 
 Native Swift + SwiftUI (AppKit-managed window).
 
+![CC Status Light listing five Claude Code sessions — each with a colour-coded state (Working, Attention, Ready, Idle), a live activity label, and a subagent-count badge](docs/screenshot.png)
+
 ## What it shows
 
 One row per session: its name, live state, the current activity when working
