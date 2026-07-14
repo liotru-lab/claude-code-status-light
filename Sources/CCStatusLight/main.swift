@@ -7,6 +7,7 @@ let arguments = CommandLine.arguments
 if let i = arguments.firstIndex(of: "--parse"), i + 1 < arguments.count {
     let parser = TranscriptParser(url: URL(fileURLWithPath: arguments[i + 1]))
     parser.update()
+    let d = parser.detail
     let out: [String: Any] = [
         "state": parser.sessionState.rawValue,
         "activity": parser.activity,
@@ -14,6 +15,31 @@ if let i = arguments.firstIndex(of: "--parse"), i + 1 < arguments.count {
         "name": parser.nameFromTranscript ?? "",
         "started": parser.hasStarted,
         "lastLineTime": parser.lastLineTime.map { ISO8601DateFormatter().string(from: $0) } ?? "",
+        "model": d.model ?? "",
+        "ccVersion": d.ccVersion ?? "",
+        "gitBranch": d.gitBranch ?? "",
+        "permissionMode": d.permissionMode ?? "",
+        "contextTokens": d.contextTokens ?? 0,
+    ]
+    if let data = try? JSONSerialization.data(withJSONObject: out,
+                                              options: [.prettyPrinted, .sortedKeys]) {
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+    exit(0)
+}
+
+// Debug harness: `CCStatusLight --env` prints the account/lifetime-stats panel
+// data (read from ~/.claude.json and ~/.claude/stats-cache.json) and exits.
+if arguments.contains("--env") {
+    let e = EnvironmentStatus.load()
+    let out: [String: Any] = [
+        "email": e.email ?? "", "displayName": e.displayName ?? "",
+        "organization": e.organization ?? "", "role": e.role ?? "",
+        "planTier": e.planTier ?? "", "hasSubscription": e.hasSubscription ?? false,
+        "totalSessions": e.totalSessions ?? 0, "totalMessages": e.totalMessages ?? 0,
+        "longestSessionMessages": e.longestSessionMessages ?? 0,
+        "models": e.models.map { ["model": $0.model, "totalTokens": $0.totalTokens] },
     ]
     if let data = try? JSONSerialization.data(withJSONObject: out,
                                               options: [.prettyPrinted, .sortedKeys]) {

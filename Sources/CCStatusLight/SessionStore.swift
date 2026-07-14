@@ -101,10 +101,12 @@ final class SessionScanner {
             }
 
             let name = parser?.nameFromTranscript ?? Session.shortId(marker.sessionId)
+            let detail = live ? parser?.detail : nil
 
             result.append(Session(id: marker.sessionId, displayName: name,
                                   state: state, activity: activity,
-                                  cwd: marker.cwd, subagentCount: subagents, live: live))
+                                  cwd: marker.cwd, subagentCount: subagents,
+                                  live: live, detail: detail))
         }
 
         // Drop parsers for sessions that vanished.

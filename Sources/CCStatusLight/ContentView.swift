@@ -16,8 +16,11 @@ extension SessionState {
 
 struct ContentView: View {
     @EnvironmentObject var store: SessionStore
+    @EnvironmentObject var environment: EnvironmentStore
     @EnvironmentObject var windowState: WindowState
     @State private var showLegend = false
+    @State private var showEnvironment = false
+    @State private var expanded: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +28,8 @@ struct ContentView: View {
                 emptyState
             } else {
                 List(store.sessions) { session in
-                    SessionRow(session: session)
+                    SessionRow(session: session,
+                               isExpanded: expandedBinding(session.id))
                 }
                 .listStyle(.inset)
             }
@@ -33,6 +37,13 @@ struct ContentView: View {
             footer
         }
         .frame(minWidth: 200, minHeight: 200)
+    }
+
+    private func expandedBinding(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { expanded.contains(id) },
+            set: { on in if on { expanded.insert(id) } else { expanded.remove(id) } }
+        )
     }
 
     @ViewBuilder
@@ -81,6 +92,17 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
+            Button {
+                if !showEnvironment { environment.refresh() }
+                showEnvironment.toggle()
+            } label: {
+                Image(systemName: "person.crop.circle")
+            }
+            .buttonStyle(.borderless)
+            .help("Claude Code account & lifetime usage")
+            .popover(isPresented: $showEnvironment, arrowEdge: .bottom) {
+                EnvironmentView(status: environment.status)
+            }
             Button {
                 showLegend.toggle()
             } label: {
@@ -131,43 +153,139 @@ struct LegendView: View {
     }
 }
 
-struct SessionRow: View {
-    let session: Session
+/// Account identity + lifetime usage (from ~/.claude.json + stats-cache.json).
+/// The live rate-limit bars from `/status` aren't shown — that data isn't
+/// stored locally (see `EnvironmentStatus`).
+struct EnvironmentView: View {
+    let status: EnvironmentStatus
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: session.state.symbolName)
-                .foregroundStyle(session.state.color)
-                .font(.system(size: 12))
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.displayName)
-                    .font(.body)
-                    .lineLimit(1)
-                if let sub = subtitle {
-                    Text(sub)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: 12) {
+            if !status.hasAny {
+                Text("No account data").font(.headline)
+                Text("Sign in to Claude Code so `~/.claude.json` is populated.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                account
+                Divider()
+                lifetime
+                if !status.models.isEmpty {
+                    Divider()
+                    byModel
                 }
+                Text("Live rate-limit usage isn't shown — Claude Code fetches it from Anthropic and it isn't stored on disk.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer()
-
-            if session.subagentCount > 0 {
-                Label("\(session.subagentCount)", systemImage: "person.2.fill")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
-                    .help("\(session.subagentCount) subagent(s) running")
-            }
-
-            Text(statusLabel)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(session.state.color)
         }
-        .padding(.vertical, 2)
+        .padding(14)
+        .frame(width: 300)
+    }
+
+    private var account: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(status.displayName ?? status.email ?? "Account").font(.headline)
+            if status.displayName != nil, let e = status.email {
+                Text(e).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if let o = status.organization { row("Organization", o) }
+            if let r = status.role { row("Role", r.capitalized) }
+            if let p = status.planLabel { row("Plan", p) }
+        }
+    }
+
+    private var lifetime: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Lifetime").font(.subheadline.weight(.semibold))
+            if let s = status.totalSessions { row("Sessions", "\(s)") }
+            if let m = status.totalMessages { row("Messages", SessionDetailView.fmt(m)) }
+            if let d = status.memberSince { row("Since", Self.month.string(from: d)) }
+            if let l = status.longestSessionMessages { row("Longest", "\(l) messages") }
+        }
+    }
+
+    private var byModel: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Tokens by model").font(.subheadline.weight(.semibold))
+            ForEach(status.models.prefix(5)) { m in
+                row(SessionDetailView.friendlyModel(m.model), SessionDetailView.fmt(m.totalTokens))
+            }
+        }
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+                .frame(width: 96, alignment: .leading)
+            Text(value).font(.caption)
+            Spacer(minLength: 0)
+        }
+    }
+
+    static let month: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MMM yyyy"; return f
+    }()
+}
+
+struct SessionRow: View {
+    let session: Session
+    @Binding var isExpanded: Bool
+
+    /// Whether there's detail worth expanding to.
+    private var expandable: Bool { session.detail?.hasAny == true }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: session.state.symbolName)
+                    .foregroundStyle(session.state.color)
+                    .font(.system(size: 12))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(session.displayName)
+                        .font(.body)
+                        .lineLimit(1)
+                    if let sub = subtitle {
+                        Text(sub)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+
+                Spacer()
+
+                if session.subagentCount > 0 {
+                    Label("\(session.subagentCount)", systemImage: "person.2.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .labelStyle(.titleAndIcon)
+                        .help("\(session.subagentCount) subagent(s) running")
+                }
+
+                Text(statusLabel)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(session.state.color)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .opacity(expandable ? 1 : 0)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+            .onTapGesture { if expandable { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } } }
+
+            if isExpanded, let detail = session.detail {
+                SessionDetailView(detail: detail)
+                    .padding(.leading, 22)
+                    .padding(.top, 4)
+                    .padding(.bottom, 2)
+            }
+        }
         .opacity(session.state == .ended ? 0.6 : 1)
     }
 
@@ -208,5 +326,72 @@ struct SessionRow: View {
         guard let cwd = session.cwd, !cwd.isEmpty else { return nil }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return cwd.hasPrefix(home) ? "~" + cwd.dropFirst(home.count) : cwd
+    }
+}
+
+/// The expandable per-session `/status`-style detail: model, CC version, branch,
+/// context/output tokens, permission mode. Only rows with a value are shown.
+struct SessionDetailView: View {
+    let detail: SessionDetail
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let m = detail.model { field("Model", Self.friendlyModel(m)) }
+            if let v = detail.ccVersion { field("Claude Code", v) }
+            if let b = detail.gitBranch { field("Branch", Self.friendlyBranch(b)) }
+            if let pm = detail.permissionMode { field("Mode", Self.friendlyMode(pm)) }
+            if let c = detail.contextTokens { field("Context", "~\(Self.fmt(c)) in use") }
+        }
+        .font(.caption)
+    }
+
+    private func field(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(width: 80, alignment: .leading)
+            Text(value)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// 193591 → "194k", 2859 → "2.9k", 640 → "640", 1_200_000 → "1.2M".
+    static func fmt(_ n: Int) -> String {
+        if n < 1000 { return "\(n)" }
+        if n < 1_000_000 {
+            let k = Double(n) / 1000
+            return k < 10 ? String(format: "%.1fk", k) : "\(Int(k.rounded()))k"
+        }
+        if n < 1_000_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        return String(format: "%.1fB", Double(n) / 1_000_000_000)
+    }
+
+    /// "claude-opus-4-8" → "Opus 4.8"; falls back to a title-cased id.
+    static func friendlyModel(_ id: String) -> String {
+        var s = id
+        if s.hasPrefix("claude-") { s.removeFirst("claude-".count) }
+        // Drop trailing date stamps like "20251001".
+        let comps: [String] = s.split(separator: "-").map(String.init)
+            .filter { !($0.count == 8 && $0.allSatisfy(\.isNumber)) }
+        guard let family = comps.first else { return id }
+        let version = comps.dropFirst().joined(separator: ".")
+        let name = family.prefix(1).uppercased() + family.dropFirst()
+        return version.isEmpty ? name : "\(name) \(version)"
+    }
+
+    static func friendlyBranch(_ b: String) -> String {
+        b == "HEAD" ? "detached HEAD" : b
+    }
+
+    static func friendlyMode(_ m: String) -> String {
+        switch m {
+        case "default":           return "Default"
+        case "acceptEdits":       return "Accept edits"
+        case "plan":              return "Plan mode"
+        case "bypassPermissions": return "Bypass permissions"
+        default:                  return m
+        }
     }
 }
