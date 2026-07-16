@@ -29,7 +29,8 @@ struct ContentView: View {
             } else {
                 List(store.sessions) { session in
                     SessionRow(session: session,
-                               isExpanded: expandedBinding(session.id))
+                               isExpanded: expandedBinding(session.id),
+                               onRefresh: { store.refresh() })
                 }
                 .listStyle(.inset)
             }
@@ -231,6 +232,9 @@ struct EnvironmentView: View {
 struct SessionRow: View {
     let session: Session
     @Binding var isExpanded: Bool
+    /// Force an immediate re-parse when tapped — a manual escape hatch when a row
+    /// looks stuck between the 1s poll ticks. Works on any row, not just expandable.
+    var onRefresh: () -> Void = {}
 
     /// Whether there's detail worth expanding to.
     private var expandable: Bool { session.detail?.hasAny == true }
@@ -277,7 +281,10 @@ struct SessionRow: View {
             }
             .padding(.vertical, 2)
             .contentShape(Rectangle())
-            .onTapGesture { if expandable { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } } }
+            .onTapGesture {
+                onRefresh()
+                if expandable { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }
+            }
 
             if isExpanded, let detail = session.detail {
                 SessionDetailView(detail: detail)

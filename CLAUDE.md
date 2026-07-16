@@ -46,7 +46,13 @@ and constraints live in a separate hub document maintained by the maintainers.
   safety nets. It also reads the display name (`custom-title` › `ai-title` › `slug`).
 - `SessionScanner` (off the main thread) reads markers, checks `pid` liveness
   (`kill(pid,0)`), tails transcripts via cached parsers, prunes stale markers, and
-  composes `Session`s. `SessionStore` (@MainActor) polls it once a second.
+  composes `Session`s. `SessionStore` (@MainActor) polls it once a second **and**
+  re-scans on demand: a `DispatchSource` vnode watch on the state dir fires
+  `refresh()` (debounced ~150ms) on every hook event — each hook writes its marker
+  via `mktemp` + `mv -f`, an atomic rename the watch sees — so state tracks hooks in
+  ~0.15s instead of up to a poll interval. The poll is the fallback for
+  transcript-only changes that fire no hook (e.g. a subagent finishing mid-turn).
+  Tapping a row also calls `refresh()` as a manual force-parse.
 - Five UI states (`SessionState`): `ready`, `working`, `notification`, `idle`,
   `ended`. `ready`/`ended` come from lifecycle; the rest are derived from the
   transcript. Verify the parser with `CCStatusLight --parse <transcript.jsonl>`.

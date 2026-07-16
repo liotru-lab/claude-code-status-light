@@ -163,6 +163,16 @@ final class SessionStore: ObservableObject {
     private let scanner: SessionScanner
     private var timer: Timer?
 
+    // Event-driven refresh: every hook writes its marker via mktemp + `mv -f`
+    // (atomic rename = a directory-content change), so a vnode watch on the state
+    // dir fires on every hook event. We re-scan immediately (debounced), instead
+    // of waiting up to a full second for the poll. The poll stays as a fallback
+    // for transcript-only changes that fire no hook (e.g. a subagent finishing
+    // mid-turn).
+    private var dirSource: DispatchSourceFileSystemObject?
+    private var dirFD: Int32 = -1
+    private var watchDebounce: DispatchWorkItem?
+
     init(directory: URL = SessionStore.stateDirectory) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         scanner = SessionScanner(directory: directory)
@@ -172,14 +182,43 @@ final class SessionStore: ObservableObject {
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        startWatching(directory)
     }
 
-    deinit { timer?.invalidate() }
+    deinit {
+        timer?.invalidate()
+        dirSource?.cancel()
+    }
 
     func refresh() {
         hooksInstalled = HookStatus.isInstalled
         scanner.scan { [weak self] sessions in
             self?.sessions = sessions
         }
+    }
+
+    /// Watch the marker directory; coalesce the burst of vnode events a single
+    /// `mv` produces into one refresh ~150ms later.
+    private func startWatching(_ directory: URL) {
+        let fd = open(directory.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        dirFD = fd
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete, .extend],
+            queue: DispatchQueue.global(qos: .utility))
+        src.setEventHandler { [weak self] in
+            Task { @MainActor in self?.scheduleWatchRefresh() }
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        dirSource = src
+    }
+
+    private func scheduleWatchRefresh() {
+        watchDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.refresh() }
+        watchDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 }
