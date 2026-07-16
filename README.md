@@ -26,11 +26,18 @@ awareness (a session with running subagents reads as *working*) and the real
 session name (`custom-title` › `ai-title` › `slug`). Lightweight hooks just mark
 which sessions are live.
 
+The list updates **the moment a session changes** — a filesystem watch re-parses
+within ~0.15s of every hook event, so answering a permission prompt or a subagent
+finishing shows up almost instantly rather than on a slow poll. (A once-a-second
+poll stays as a backstop.) Clicking a row also **forces an immediate re-parse** if
+you ever want to poke a session by hand.
+
 Closing the window keeps the app running in the background; the dock icon reopens
 it. There's an optional **Show on all Spaces** toggle.
 
-**Click a session** to expand its detail — model (e.g. Opus 4.8), Claude Code
-version, git branch, permission mode, and context-window tokens in use. The footer
+**Click a session** to expand its detail (and force a fresh re-parse) — model
+(e.g. Opus 4.8), Claude Code version, git branch, permission mode, and
+context-window tokens in use. The footer
 **account** button (👤) shows who you're signed in as and lifetime usage
 (sessions, messages, per-model tokens), read from Claude Code's own files. (The
 live `/status` rate-limit bars aren't shown — that data isn't stored locally.)
