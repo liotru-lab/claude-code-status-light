@@ -44,6 +44,13 @@ and constraints live in a separate hub document maintained by the maintainers.
   `completed` tool_result; async removed on a `queue-operation` completion
   notification); `end_turn`+question → attention; `turn_duration`/`idle_prompt`
   safety nets. It also reads the display name (`custom-title` › `ai-title` › `slug`).
+- **Async agents are tracked separately** (`asyncAgents ⊆ activeAgents`). A
+  background agent's tool_result arrives *immediately* at launch carrying
+  `toolUseResult.isAsync` — it's a launch ack, not a completion — so it must not
+  clear the agent. Critically, the `turn_duration` safety net may only drop **sync**
+  agents (`formIntersection(asyncAgents)`): background agents outlive the
+  orchestrator's turn, and wiping them there made a session with three running
+  agents read `idle` (fixed in 0.3.1). Only a completion notification clears them.
 - `SessionScanner` (off the main thread) reads markers, checks `pid` liveness
   (`kill(pid,0)`), tails transcripts via cached parsers, prunes stale markers, and
   composes `Session`s. `SessionStore` (@MainActor) polls it once a second **and**
