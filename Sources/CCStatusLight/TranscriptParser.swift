@@ -21,6 +21,11 @@ final class TranscriptParser {
     private(set) var activity: String = ""
     private(set) var lastLineTime: Date?   // newest envelope timestamp seen
     private var activeAgents: Set<String> = []
+    /// Subset of `activeAgents` launched as background/async agents (their
+    /// tool_result returns immediately with `isAsync`). They legitimately outlive
+    /// the orchestrator's turn, so `turn_duration` must not clear them — only a
+    /// completion notification does.
+    private var asyncAgents: Set<String> = []
     private var compacting = false
     private var sawAssistant = false
 
@@ -125,7 +130,8 @@ final class TranscriptParser {
     private func resetMachine() {
         offset = 0; partial = Data()
         state = .idle; activity = ""; lastLineTime = nil
-        activeAgents.removeAll(); compacting = false; sawAssistant = false
+        activeAgents.removeAll(); asyncAgents.removeAll()
+        compacting = false; sawAssistant = false
         customTitle = nil; aiTitle = nil; slug = nil
         model = nil; ccVersion = nil; gitBranch = nil; permissionMode = nil
         contextTokens = nil
@@ -239,8 +245,15 @@ final class TranscriptParser {
                 switch block["type"] as? String {
                 case "tool_result":
                     hasToolResult = true
-                    if !isAsync, let id = block["tool_use_id"] as? String {
-                        activeAgents.remove(id)   // sync agent finished
+                    if let id = block["tool_use_id"] as? String {
+                        if isAsync {
+                            // Background agent: this result is the *launch*
+                            // acknowledgement, not a completion. Keep it pinned
+                            // until its completion notification arrives.
+                            if activeAgents.contains(id) { asyncAgents.insert(id) }
+                        } else {
+                            activeAgents.remove(id)   // sync agent finished
+                        }
                     }
                 case "text":
                     if let s = block["text"] as? String, !s.isEmpty { hasText = true }
@@ -257,7 +270,7 @@ final class TranscriptParser {
         // A fresh real prompt (not a tool_result) starts a new turn.
         let isRealPrompt = dict["promptId"] != nil
         if hasText && !hasToolResult && isRealPrompt {
-            activeAgents.removeAll()
+            activeAgents.removeAll(); asyncAgents.removeAll()
             state = .active; activity = "thinking"
         }
     }
@@ -267,8 +280,15 @@ final class TranscriptParser {
         case .some("compact_boundary"):
             compacting = true; state = .compacting; activity = "compacting"
         case .some("turn_duration"):
-            activeAgents.removeAll()
-            if state == .active { state = .idle; activity = "" }
+            // The orchestrator's turn ended. Sync agents cannot outlive it, so
+            // dropping them is a safety net against a missed tool_result — but
+            // background agents *do* outlive it and keep the session working.
+            activeAgents.formIntersection(asyncAgents)
+            if !activeAgents.isEmpty {
+                state = .active; activity = "subagent"
+            } else if state == .active {
+                state = .idle; activity = ""
+            }
         default:
             break
         }
@@ -283,6 +303,7 @@ final class TranscriptParser {
         switch tag("status", in: content) {
         case .some("completed"), .some("killed"), .some("failed"):
             activeAgents.remove(toolUseId)
+            asyncAgents.remove(toolUseId)
             // If the orchestrator had already ended its turn and was only kept
             // `active` by this now-finished background agent, settle to idle.
             if activeAgents.isEmpty, state == .active, activity == "subagent" {
