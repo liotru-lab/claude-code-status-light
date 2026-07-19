@@ -102,7 +102,17 @@ if [[ "$upgrade" == yes ]]; then
     "${old_version:+ (${old_version} → ${new_version:-latest})}"
   if [[ "$was_running" == yes ]]; then
     info "Reopening it…"
-    open -a "$dst" 2>/dev/null || warn "Couldn't reopen it — launch it yourself."
+    # Replacing the bundle at an existing path leaves LaunchServices with a stale
+    # record, and `open` then fails silently (rc=0) — re-register first.
+    lsregister=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+    [[ -x "$lsregister" ]] && "$lsregister" -f "$dst" >/dev/null 2>&1
+    open "$dst" 2>/dev/null || open -a "$dst" 2>/dev/null || true
+    for _ in $(seq 1 25); do
+      /usr/bin/pgrep -f "$dst/Contents/MacOS/" >/dev/null 2>&1 && break
+      sleep 0.2
+    done
+    /usr/bin/pgrep -f "$dst/Contents/MacOS/" >/dev/null 2>&1 \
+      || warn "Couldn't reopen it — launch it yourself."
   fi
   info "Your hooks and settings are untouched."
 else
