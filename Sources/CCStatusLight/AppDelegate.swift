@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let windowState = WindowState()
     private let callbackEngine = CallbackEngine()
     private let callbackSettings = CallbackSettings()
+    private let updateChecker = UpdateChecker()
     private var cancellables = Set<AnyCancellable>()
     private var window: NSWindow?
     private var preferencesWindow: NSWindow?
@@ -90,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .environmentObject(store)
             .environmentObject(environmentStore)
             .environmentObject(windowState)
+            .environmentObject(updateChecker)
 
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
@@ -112,7 +114,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func showPreferences(_ sender: Any?) {
         if preferencesWindow == nil {
-            let hosting = NSHostingController(rootView: PreferencesView(settings: callbackSettings))
+            let hosting = NSHostingController(rootView: PreferencesView(settings: callbackSettings,
+                                                                        updates: updateChecker))
             let w = NSWindow(contentViewController: hosting)
             w.title = "Settings"
             w.styleMask = [.titled, .closable]
@@ -123,6 +126,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         callbackSettings.reload()
         preferencesWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Manual check from the menu. Always runs — the user explicitly asked, so it
+    /// ignores the automatic-check preference — and always reports back, since a
+    /// silent no-op would read as broken.
+    @objc func checkForUpdates(_ sender: Any?) {
+        var observer: NSObjectProtocol?
+        observer = NotificationCenter.default.addObserver(
+            forName: .updateCheckFinished, object: nil, queue: .main) { [weak self] _ in
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            MainActor.assumeIsolated { self?.presentUpdateResult() }
+        }
+        updateChecker.check()
+    }
+
+    private func presentUpdateResult() {
+        let alert = NSAlert()
+        if let error = updateChecker.lastError {
+            alert.messageText = "Couldn't check for updates"
+            alert.informativeText = error
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+        if updateChecker.updateAvailable, let latest = updateChecker.latestVersion {
+            alert.messageText = "Version \(latest) is available"
+            alert.informativeText = """
+                You're running \(UpdateChecker.currentVersion). \
+                Download it from the release page, or re-run the install one-liner.
+                """
+            alert.addButton(withTitle: "Open Release Page")
+            alert.addButton(withTitle: "Later")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(UpdateChecker.releasesPage)
+            }
+        } else {
+            alert.messageText = "You're up to date"
+            alert.informativeText = "CC Status Light \(UpdateChecker.currentVersion) is the latest version."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 
     // MARK: - Menu & About
@@ -146,6 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let settings = appMenu.addItem(withTitle: "Settings…",
                                        action: #selector(showPreferences(_:)), keyEquivalent: ",")
         settings.target = self
+        let updates = appMenu.addItem(withTitle: "Check for Updates…",
+                                      action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+        updates.target = self
+
         appMenu.addItem(.separator())
         let installItem = appMenu.addItem(withTitle: "Install Hooks…",
                                           action: #selector(installHooks(_:)), keyEquivalent: "")
