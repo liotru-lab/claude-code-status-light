@@ -57,6 +57,7 @@ final class CallbackSettings: ObservableObject {
 /// — a busylight is just one preset; notification/sound presets suit anyone.
 struct PreferencesView: View {
     @ObservedObject var settings: CallbackSettings
+    @ObservedObject var updates: UpdateChecker
 
     private static let rows: [(state: String, label: String, color: Color)] = [
         ("notification", "Attention", .red),
@@ -107,10 +108,42 @@ struct PreferencesView: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Check for new versions", isOn: $updates.automatic)
+                    .font(.headline)
+                Text("Asks GitHub once a day whether a newer release exists, so you don't sit on a version with a bug that's already fixed. Nothing about you or your sessions is sent, and nothing is downloaded or installed — it only tells you, and points at the release notes.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Button("Check now") { updates.check() }
+                        .disabled(updates.isChecking)
+                    if updates.isChecking {
+                        Text("Checking…").font(.caption).foregroundStyle(.secondary)
+                    } else if let error = updates.lastError {
+                        Text(error).font(.caption).foregroundStyle(.orange).lineLimit(1)
+                    } else if updates.updateAvailable, let latest = updates.latestVersion {
+                        Text("Version \(latest) available")
+                            .font(.caption.weight(.medium)).foregroundStyle(.blue)
+                        Link("Release notes", destination: UpdateChecker.releasesPage)
+                            .font(.caption)
+                    } else if updates.lastChecked != nil {
+                        Text("Up to date (\(UpdateChecker.currentVersion))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .controlSize(.small)
+                .padding(.top, 2)
+            }
+
+            Divider()
+
             HStack {
                 Button("Reveal config") { settings.reveal(CallbackEngine.configURL) }
                 Button("Reveal log") { settings.reveal(CallbackEngine.logURL) }
                 Spacer()
+                Text("v\(UpdateChecker.currentVersion)")
+                    .font(.caption2).foregroundStyle(.tertiary)
             }
             .controlSize(.small)
         }

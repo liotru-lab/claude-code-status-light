@@ -106,6 +106,22 @@ and constraints live in a separate hub document maintained by the maintainers.
 - Same anti-patterns hold: never write `~/.claude.json`/`settings.json`, no
   LaunchAgent. Callback commands are user-defined (like hooks).
 
+## Update check
+
+- `UpdateChecker` (@MainActor) GETs the public GitHub *latest release* endpoint and
+  compares `tag_name` with `CFBundleShortVersionString`. Comparison is
+  **component-wise numeric** (`isNewer`), so 0.3.10 > 0.3.9 — a string compare gets
+  that backwards. Verify with `CCStatusLight --check-update`.
+- **Automatic checking is off by default** (`UserDefaults` `checkForUpdatesAutomatically`);
+  when enabled it checks on launch then daily. The **Check for Updates…** menu item
+  always works, since the user asked for it explicitly.
+- It only ever *notifies* — a dismissible footer banner plus a Preferences row,
+  both linking to the release page. It never downloads, installs, or self-updates:
+  that would need an update framework and would collide with the no-LaunchAgent /
+  clean-uninstall rules. The request sends no identifiers, counters, or query
+  params — a one-way version lookup, which is why it doesn't count as the
+  "telemetry / phone-home" the constraints forbid.
+
 ## Hooks
 
 - `install-hooks.sh` is the only thing that writes `~/.claude/settings.json`, and

@@ -49,6 +49,44 @@ if arguments.contains("--env") {
     exit(0)
 }
 
+// Debug harness: `CCStatusLight --check-update` performs one update check and
+// prints the result. Verifies the GitHub lookup and version comparison without
+// the GUI (and without touching the automatic-check preference).
+if arguments.contains("--check-update") {
+    // The result arrives via a @MainActor hop and a main-queue observer, so the
+    // run loop has to actually run — a blocking semaphore would deadlock here.
+    var finished = false
+    MainActor.assumeIsolated {
+        let checker = UpdateChecker()
+        var observer: NSObjectProtocol?
+        observer = NotificationCenter.default.addObserver(
+            forName: .updateCheckFinished, object: nil, queue: .main) { _ in
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            MainActor.assumeIsolated {
+                let out: [String: Any] = [
+                    "current": UpdateChecker.currentVersion,
+                    "latest": checker.latestVersion ?? "",
+                    "updateAvailable": checker.updateAvailable,
+                    "error": checker.lastError ?? "",
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: out,
+                                                          options: [.prettyPrinted, .sortedKeys]) {
+                    FileHandle.standardOutput.write(data)
+                    FileHandle.standardOutput.write(Data("\n".utf8))
+                }
+            }
+            finished = true
+        }
+        checker.check()
+    }
+    let deadline = Date().addingTimeInterval(30)
+    while !finished && Date() < deadline {
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.1))
+    }
+    if !finished { FileHandle.standardError.write(Data("check timed out\n".utf8)) }
+    exit(finished ? 0 : 1)
+}
+
 // Classic AppKit entry point. The app fully owns its NSWindow (created in
 // AppDelegate) so the POC's window rules — closing the window does not quit,
 // dock-click reopens, "Show on all Spaces" — are exact and not fighting a
