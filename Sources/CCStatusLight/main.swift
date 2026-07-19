@@ -87,6 +87,63 @@ if arguments.contains("--check-update") {
     exit(finished ? 0 : 1)
 }
 
+// Debug harness: `CCStatusLight --self-update` runs a real in-app update
+// (download → verify → hand off to the swap helper) against this bundle, so the
+// updater can be exercised without clicking through the GUI.
+if arguments.contains("--self-update") {
+    var settled = false
+    let updater = MainActor.assumeIsolated { SelfUpdater() }
+    MainActor.assumeIsolated {
+        let checker = UpdateChecker()
+        updater.onHandoff = {
+            FileHandle.standardOutput.write(Data("handoff: helper launched\n".utf8))
+            settled = true
+        }
+        var observer: NSObjectProtocol?
+        observer = NotificationCenter.default.addObserver(
+            forName: .updateCheckFinished, object: nil, queue: .main) { _ in
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            MainActor.assumeIsolated {
+                guard let asset = checker.latestAssetURL else {
+                    FileHandle.standardError.write(Data("no .zip asset in latest release\n".utf8))
+                    settled = true
+                    return
+                }
+                FileHandle.standardOutput.write(Data("""
+                    current: \(UpdateChecker.currentVersion)
+                    latest:  \(checker.latestVersion ?? "?")
+                    asset:   \(asset.lastPathComponent)
+
+                    """.utf8))
+                updater.update(from: asset)
+            }
+        }
+        checker.check()
+    }
+
+    // Pump the run loop, echoing phase changes so a verification failure is visible.
+    let deadline = Date().addingTimeInterval(180)
+    var lastPhase: SelfUpdater.Phase = .idle
+    while !settled && Date() < deadline {
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        let phase = MainActor.assumeIsolated { updater.phase }
+        if phase != lastPhase {
+            lastPhase = phase
+            switch phase {
+            case .working(let s):
+                FileHandle.standardOutput.write(Data("  \(s)\n".utf8))
+            case .failed(let m):
+                FileHandle.standardError.write(Data("FAILED: \(m)\n".utf8))
+                settled = true
+                exit(1)
+            case .idle:
+                break
+            }
+        }
+    }
+    exit(settled ? 0 : 1)
+}
+
 // Classic AppKit entry point. The app fully owns its NSWindow (created in
 // AppDelegate) so the POC's window rules — closing the window does not quit,
 // dock-click reopens, "Show on all Spaces" — are exact and not fighting a

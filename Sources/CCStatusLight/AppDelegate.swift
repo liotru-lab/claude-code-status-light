@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let callbackEngine = CallbackEngine()
     private let callbackSettings = CallbackSettings()
     private let updateChecker = UpdateChecker()
+    private let selfUpdater = SelfUpdater()
     private var cancellables = Set<AnyCancellable>()
     private var window: NSWindow?
     private var preferencesWindow: NSWindow?
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .environmentObject(environmentStore)
             .environmentObject(windowState)
             .environmentObject(updateChecker)
+            .environmentObject(selfUpdater)
 
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
@@ -115,7 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func showPreferences(_ sender: Any?) {
         if preferencesWindow == nil {
             let hosting = NSHostingController(rootView: PreferencesView(settings: callbackSettings,
-                                                                        updates: updateChecker))
+                                                                        updates: updateChecker,
+                                                                        updater: selfUpdater))
             let w = NSWindow(contentViewController: hosting)
             w.title = "Settings"
             w.styleMask = [.titled, .closable]
@@ -153,13 +156,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if updateChecker.updateAvailable, let latest = updateChecker.latestVersion {
             alert.messageText = "Version \(latest) is available"
             alert.informativeText = """
-                You're running \(UpdateChecker.currentVersion). \
-                Download it from the release page, or re-run the install one-liner.
+                You're running \(UpdateChecker.currentVersion). Updating downloads \
+                the release, verifies its signature, and restarts the app.
                 """
-            alert.addButton(withTitle: "Open Release Page")
+            alert.addButton(withTitle: "Update Now")
+            alert.addButton(withTitle: "Release Notes")
             alert.addButton(withTitle: "Later")
-            if alert.runModal() == .alertFirstButtonReturn {
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                if let asset = updateChecker.latestAssetURL {
+                    selfUpdater.update(from: asset)
+                } else {
+                    NSWorkspace.shared.open(UpdateChecker.releasesPage)
+                }
+            case .alertSecondButtonReturn:
                 NSWorkspace.shared.open(UpdateChecker.releasesPage)
+            default:
+                break
             }
         } else {
             alert.messageText = "You're up to date"
