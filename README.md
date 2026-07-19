@@ -152,6 +152,19 @@ lives next to it in `callbacks.json`; both are removed by the uninstall below.
 > `~/.claude/settings.json` — remove those so they don't fight the app over the
 > one light.
 
+## Update check
+
+**CC Status Light ▸ Check for Updates…** asks GitHub whether a newer release
+exists and tells you — nothing more. There's also a **Check for new versions**
+toggle in Settings for a once-a-day check, **off by default**, so out of the box
+the app makes no network requests at all.
+
+It only ever notifies (a dismissible banner linking to the release notes); it
+never downloads or installs anything, and there's no updater daemon or
+LaunchAgent. The request sends no identifiers or usage data — it's a one-way
+version lookup, not telemetry. To actually update, re-run the install one-liner
+above or grab the zip from the release page.
+
 ## Uninstall — leaves zero residue
 
 ```sh

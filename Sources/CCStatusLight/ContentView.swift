@@ -18,6 +18,7 @@ struct ContentView: View {
     @EnvironmentObject var store: SessionStore
     @EnvironmentObject var environment: EnvironmentStore
     @EnvironmentObject var windowState: WindowState
+    @EnvironmentObject var updates: UpdateChecker
     @State private var showLegend = false
     @State private var showEnvironment = false
     @State private var expanded: Set<String> = []
@@ -34,10 +35,36 @@ struct ContentView: View {
                 }
                 .listStyle(.inset)
             }
+            if updates.shouldNotify, let latest = updates.latestVersion {
+                Divider()
+                updateBanner(latest)
+            }
             Divider()
             footer
         }
         .frame(minWidth: 200, minHeight: 200)
+    }
+
+    /// Quiet, dismissible notice — informational, never a modal interruption.
+    private func updateBanner(_ latest: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(.blue)
+            Text("Version \(latest) available")
+                .font(.caption.weight(.medium))
+            Link("Release notes", destination: UpdateChecker.releasesPage)
+                .font(.caption)
+            Spacer()
+            Button {
+                updates.dismissCurrent()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help("Dismiss until the next version")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
     }
 
     private func expandedBinding(_ id: String) -> Binding<Bool> {
