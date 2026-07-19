@@ -21,6 +21,11 @@ final class TranscriptParser {
     private(set) var activity: String = ""
     private(set) var lastLineTime: Date?   // newest envelope timestamp seen
     private var activeAgents: Set<String> = []
+    /// tool_use id of an outstanding AskUserQuestion / ExitPlanMode. Its
+    /// tool_result means you answered, so the session stops "waiting" — without
+    /// this it stays red until the *next* assistant message, which during a long
+    /// thinking phase can be minutes away (the transcript is silent meanwhile).
+    private var pendingQuestionId: String?
     /// Subset of `activeAgents` launched as background/async agents (their
     /// tool_result returns immediately with `isAsync`). They legitimately outlive
     /// the orchestrator's turn, so `turn_duration` must not clear them — only a
@@ -131,6 +136,7 @@ final class TranscriptParser {
         offset = 0; partial = Data()
         state = .idle; activity = ""; lastLineTime = nil
         activeAgents.removeAll(); asyncAgents.removeAll()
+        pendingQuestionId = nil
         compacting = false; sawAssistant = false
         customTitle = nil; aiTitle = nil; slug = nil
         model = nil; ccVersion = nil; gitBranch = nil; permissionMode = nil
@@ -206,6 +212,7 @@ final class TranscriptParser {
                 let name = last["name"] as? String ?? ""
                 if name == "AskUserQuestion" || name == "ExitPlanMode" {
                     state = .waiting; activity = "question"
+                    pendingQuestionId = last["id"] as? String
                 } else {
                     state = .active; activity = name
                 }
@@ -246,6 +253,13 @@ final class TranscriptParser {
                 case "tool_result":
                     hasToolResult = true
                     if let id = block["tool_use_id"] as? String {
+                        // The answer to a pending question: stop waiting on the
+                        // user and show the work that follows (usually thinking,
+                        // which writes nothing to the transcript for a while).
+                        if id == pendingQuestionId {
+                            pendingQuestionId = nil
+                            if state == .waiting { state = .active; activity = "thinking" }
+                        }
                         if isAsync {
                             // Background agent: this result is the *launch*
                             // acknowledgement, not a completion. Keep it pinned
