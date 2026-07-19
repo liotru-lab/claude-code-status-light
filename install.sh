@@ -57,18 +57,58 @@ ditto -x -k "$tmp/app.zip" "$tmp/unpacked" || error "Unpack failed."
 src="$(/usr/bin/find "$tmp/unpacked" -maxdepth 2 -name "$APP" -type d | head -1)"
 [[ -n "$src" ]] || error "$APP not found in the downloaded archive."
 
-# --- install to /Applications ----------------------------------------------
+# --- upgrade? note the version we're replacing ------------------------------
 dst="$INSTALL_DIR/$APP"
+plist="$dst/Contents/Info.plist"
+upgrade=no
+old_version=""
+if [[ -d "$dst" ]]; then
+  upgrade=yes
+  old_version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist" 2>/dev/null || true)"
+fi
+
+# --- quit a running copy first ----------------------------------------------
+# Replacing a running .app leaves the live process on the old inode: it keeps
+# executing the old code and can fault if it lazily loads a resource from the
+# bundle we just swapped. So stop it, and put it back afterwards if it was up.
+was_running=no
+if /usr/bin/pgrep -f "$APP/Contents/MacOS/" >/dev/null 2>&1; then
+  was_running=yes
+  info "Quitting the running copy…"
+  /usr/bin/osascript -e 'quit app "CCStatusLight"' >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    /usr/bin/pgrep -f "$APP/Contents/MacOS/" >/dev/null 2>&1 || break
+    sleep 0.5
+  done
+  if /usr/bin/pgrep -f "$APP/Contents/MacOS/" >/dev/null 2>&1; then
+    warn "It didn't quit on its own — forcing it."
+    /usr/bin/pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true
+    sleep 1
+  fi
+fi
+
+# --- install to /Applications ----------------------------------------------
 if [[ -w "$INSTALL_DIR" ]]; then
   rm -rf "$dst"; cp -R "$src" "$dst"
 else
   warn "$INSTALL_DIR isn't writable — using sudo (you may be prompted)."
   sudo rm -rf "$dst"; sudo cp -R "$src" "$dst"
 fi
+new_version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist" 2>/dev/null || true)"
 info "Installed to $dst"
 
-printf '\n\033[32m✓ CC Status Light installed.\033[0m\n\n'
-info "Next steps:"
-info "  1. Open it:            open -a \"CC Status Light\""
-info "  2. Wire the hooks:     in the app, choose  CC Status Light ▸ Install Hooks…"
-info "  3. Start a Claude Code session — it appears in the window."
+if [[ "$upgrade" == yes ]]; then
+  printf '\n\033[32m✓ CC Status Light updated%s.\033[0m\n\n' \
+    "${old_version:+ (${old_version} → ${new_version:-latest})}"
+  if [[ "$was_running" == yes ]]; then
+    info "Reopening it…"
+    open -a "$dst" 2>/dev/null || warn "Couldn't reopen it — launch it yourself."
+  fi
+  info "Your hooks and settings are untouched."
+else
+  printf '\n\033[32m✓ CC Status Light installed.\033[0m\n\n'
+  info "Next steps:"
+  info "  1. Open it:            open -a \"CC Status Light\""
+  info "  2. Wire the hooks:     in the app, choose  CC Status Light ▸ Install Hooks…"
+  info "  3. Start a Claude Code session — it appears in the window."
+fi

@@ -162,8 +162,18 @@ the app makes no network requests at all.
 It only ever notifies (a dismissible banner linking to the release notes); it
 never downloads or installs anything, and there's no updater daemon or
 LaunchAgent. The request sends no identifiers or usage data — it's a one-way
-version lookup, not telemetry. To actually update, re-run the install one-liner
-above or grab the zip from the release page.
+version lookup, not telemetry.
+
+**To actually update, re-run the install one-liner** — the same command as a
+fresh install:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/liotru-lab/claude-code-status-light/main/install.sh | bash
+```
+
+It quits a running copy first (replacing a live `.app` in place is unsafe),
+installs the new build, and reopens it if it was running. Your hooks, callbacks,
+and settings live outside the bundle and are untouched.
 
 ## Uninstall — leaves zero residue
 
