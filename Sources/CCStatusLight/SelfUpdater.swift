@@ -127,7 +127,25 @@ final class SelfUpdater: ObservableObject {
 
         /bin/rm -rf "$dst" || exit 1
         /usr/bin/ditto "$src" "$dst" || exit 1
-        /usr/bin/open -a "$dst"
+
+        # Replacing the bundle at an existing path leaves LaunchServices holding a
+        # stale record for it, and `open` then fails (silently, with rc=0) against
+        # the entry that no longer matches. Re-register before relaunching.
+        lsregister=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+        [ -x "$lsregister" ] && "$lsregister" -f "$dst" >/dev/null 2>&1
+
+        # Relaunch, and verify it actually came up — a failed relaunch would leave
+        # the user staring at nothing after a successful update.
+        /usr/bin/open "$dst" || /usr/bin/open -a "$dst" || true
+        for _ in $(seq 1 25); do
+          /usr/bin/pgrep -f "$dst/Contents/MacOS/" >/dev/null 2>&1 && break
+          sleep 0.2
+        done
+        if ! /usr/bin/pgrep -f "$dst/Contents/MacOS/" >/dev/null 2>&1; then
+          # Last resort: launch the executable directly.
+          "$dst/Contents/MacOS/CCStatusLight" >/dev/null 2>&1 &
+        fi
+
         /bin/rm -rf "$tmp"
         """
         let url = temp.appendingPathComponent("update-helper.sh")

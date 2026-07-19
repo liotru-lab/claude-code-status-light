@@ -136,6 +136,13 @@ and constraints live in a separate hub document maintained by the maintainers.
   carries the same team OU, so it's the notarization check that rejects non-release
   builds. Tampering trips the sealed-resource check; a third-party re-sign trips
   the requirement. All three cases are verified.
+- **Re-register with LaunchServices after swapping the bundle.** Replacing an app
+  at an existing path leaves LaunchServices holding a stale record, and `open`
+  then fails *silently with rc=0* — the update succeeds but the app never comes
+  back (fixed in 0.5.1). Both the helper and `install.sh` run `lsregister -f` on
+  the destination, then verify the process actually appears and fall back to
+  launching the executable directly. Any future code that replaces the bundle in
+  place must do the same.
 - Exercise the whole path headlessly with `CCStatusLight --self-update`
   (`SelfUpdater.onHandoff` is the seam that lets it run without an NSApplication).
 
