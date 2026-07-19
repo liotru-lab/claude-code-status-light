@@ -44,6 +44,13 @@ and constraints live in a separate hub document maintained by the maintainers.
   `completed` tool_result; async removed on a `queue-operation` completion
   notification); `end_turn`+question → attention; `turn_duration`/`idle_prompt`
   safety nets. It also reads the display name (`custom-title` › `ai-title` › `slug`).
+- **A pending question is cleared by its own tool_result** (`pendingQuestionId`).
+  `AskUserQuestion`/`ExitPlanMode` set `.waiting`; the matching tool_result means
+  the user answered, so the parser moves to `working`/"thinking". Without it the
+  row stayed red until the *next assistant message* — and Claude's thinking phase
+  writes nothing to the transcript, so that could be minutes (fixed in 0.3.2).
+  Note the general shape of this class of bug: **a silent transcript is not an
+  idle session**, so never infer state from absence of lines.
 - **Async agents are tracked separately** (`asyncAgents ⊆ activeAgents`). A
   background agent's tool_result arrives *immediately* at launch carrying
   `toolUseResult.isAsync` — it's a launch ack, not a completion — so it must not
