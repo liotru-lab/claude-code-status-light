@@ -22,6 +22,8 @@ extension Notification.Name {
 final class UpdateChecker: ObservableObject {
     /// Newest published version (e.g. "0.4.0"), once a check has succeeded.
     @Published private(set) var latestVersion: String?
+    /// The .zip asset for that release — what an in-app update downloads.
+    @Published private(set) var latestAssetURL: URL?
     @Published private(set) var isChecking = false
     @Published private(set) var lastChecked: Date?
     @Published private(set) var lastError: String?
@@ -102,6 +104,7 @@ final class UpdateChecker: ObservableObject {
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             var version: String?
+            var asset: URL?
             var failure: String?
             if let error {
                 failure = error.localizedDescription
@@ -111,6 +114,12 @@ final class UpdateChecker: ObservableObject {
                       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let tag = obj["tag_name"] as? String {
                 version = Self.normalize(tag)
+                if let assets = obj["assets"] as? [[String: Any]] {
+                    asset = assets
+                        .compactMap { $0["browser_download_url"] as? String }
+                        .first { $0.hasSuffix(".zip") }
+                        .flatMap(URL.init(string:))
+                }
             } else {
                 failure = "Unexpected response from GitHub"
             }
@@ -119,6 +128,7 @@ final class UpdateChecker: ObservableObject {
                 self.isChecking = false
                 self.lastChecked = Date()
                 if let version { self.latestVersion = version }
+                if let asset { self.latestAssetURL = asset }
                 self.lastError = failure
                 NotificationCenter.default.post(name: .updateCheckFinished, object: nil)
             }

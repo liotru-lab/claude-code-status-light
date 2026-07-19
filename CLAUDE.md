@@ -115,12 +115,29 @@ and constraints live in a separate hub document maintained by the maintainers.
 - **Automatic checking is off by default** (`UserDefaults` `checkForUpdatesAutomatically`);
   when enabled it checks on launch then daily. The **Check for Updates…** menu item
   always works, since the user asked for it explicitly.
-- It only ever *notifies* — a dismissible footer banner plus a Preferences row,
-  both linking to the release page. It never downloads, installs, or self-updates:
-  that would need an update framework and would collide with the no-LaunchAgent /
-  clean-uninstall rules. The request sends no identifiers, counters, or query
-  params — a one-way version lookup, which is why it doesn't count as the
-  "telemetry / phone-home" the constraints forbid.
+- The check itself sends no identifiers, counters, or query params — a one-way
+  version lookup, which is why it isn't the "telemetry / phone-home" the
+  constraints forbid.
+
+## In-app update (`SelfUpdater`)
+
+- **Update Now** (banner, Preferences, and the Check-for-Updates alert) installs
+  the release in place. An app can't overwrite its own running bundle, so it does
+  what `install.sh` does: download → verify → write a one-shot helper script →
+  quit → the helper waits for the process to exit, swaps the bundle, relaunches,
+  and deletes itself. **Nothing persistent is installed** — no LaunchAgent, no
+  daemon, no login item — so clean-uninstall still holds.
+- **Verification is load-bearing and must never be weakened.** Downloaded code is
+  only safe if we prove its origin, so the payload must satisfy a designated
+  requirement pinned to the team (`certificate leaf[subject.OU] = 38LKT4ZSN5`)
+  *and* pass `spctl` as a **Notarized Developer ID**. Both run before anything on
+  disk is touched; either failing aborts with the install untouched.
+  Note the team pin alone is **not** sufficient — an Apple Development build
+  carries the same team OU, so it's the notarization check that rejects non-release
+  builds. Tampering trips the sealed-resource check; a third-party re-sign trips
+  the requirement. All three cases are verified.
+- Exercise the whole path headlessly with `CCStatusLight --self-update`
+  (`SelfUpdater.onHandoff` is the seam that lets it run without an NSApplication).
 
 ## Hooks
 

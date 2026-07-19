@@ -19,6 +19,7 @@ struct ContentView: View {
     @EnvironmentObject var environment: EnvironmentStore
     @EnvironmentObject var windowState: WindowState
     @EnvironmentObject var updates: UpdateChecker
+    @EnvironmentObject var updater: SelfUpdater
     @State private var showLegend = false
     @State private var showEnvironment = false
     @State private var expanded: Set<String> = []
@@ -50,18 +51,35 @@ struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.down.circle.fill")
                 .foregroundStyle(.blue)
-            Text("Version \(latest) available")
-                .font(.caption.weight(.medium))
-            Link("Release notes", destination: UpdateChecker.releasesPage)
-                .font(.caption)
-            Spacer()
-            Button {
-                updates.dismissCurrent()
-            } label: {
-                Image(systemName: "xmark")
+
+            if case .working(let status) = updater.phase {
+                Text(status).font(.caption.weight(.medium))
+                ProgressView().controlSize(.small)
+            } else if let failure = updater.failure {
+                Text(failure)
+                    .font(.caption).foregroundStyle(.orange)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Dismiss") { updater.reset() }
+                    .buttonStyle(.borderless).font(.caption)
+            } else {
+                Text("Version \(latest) available")
+                    .font(.caption.weight(.medium))
+                if let asset = updates.latestAssetURL {
+                    Button("Update Now") { updater.update(from: asset) }
+                        .controlSize(.small)
+                }
+                Link("Release notes", destination: UpdateChecker.releasesPage)
+                    .font(.caption)
+                Spacer()
+                Button {
+                    updates.dismissCurrent()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Dismiss until the next version")
             }
-            .buttonStyle(.borderless)
-            .help("Dismiss until the next version")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

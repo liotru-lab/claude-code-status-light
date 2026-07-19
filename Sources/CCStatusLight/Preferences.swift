@@ -58,6 +58,7 @@ final class CallbackSettings: ObservableObject {
 struct PreferencesView: View {
     @ObservedObject var settings: CallbackSettings
     @ObservedObject var updates: UpdateChecker
+    @ObservedObject var updater: SelfUpdater
 
     private static let rows: [(state: String, label: String, color: Color)] = [
         ("notification", "Attention", .red),
@@ -125,6 +126,10 @@ struct PreferencesView: View {
                     } else if updates.updateAvailable, let latest = updates.latestVersion {
                         Text("Version \(latest) available")
                             .font(.caption.weight(.medium)).foregroundStyle(.blue)
+                        if let asset = updates.latestAssetURL {
+                            Button("Update Now") { updater.update(from: asset) }
+                                .disabled(updater.isBusy)
+                        }
                         Link("Release notes", destination: UpdateChecker.releasesPage)
                             .font(.caption)
                     } else if updates.lastChecked != nil {

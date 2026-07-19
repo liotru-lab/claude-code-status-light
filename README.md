@@ -159,21 +159,26 @@ exists and tells you — nothing more. There's also a **Check for new versions**
 toggle in Settings for a once-a-day check, **off by default**, so out of the box
 the app makes no network requests at all.
 
-It only ever notifies (a dismissible banner linking to the release notes); it
-never downloads or installs anything, and there's no updater daemon or
-LaunchAgent. The request sends no identifiers or usage data — it's a one-way
-version lookup, not telemetry.
+When a newer version exists you get a dismissible banner with an **Update Now**
+button. It downloads the release, **verifies it's signed by this project's Apple
+team and notarized by Apple**, then swaps the app and restarts it. If either
+check fails, nothing is touched and it tells you why.
 
-**To actually update, re-run the install one-liner** — the same command as a
-fresh install:
+There's no updater daemon, LaunchAgent, or login item — the swap is done by a
+one-shot script that deletes itself, so uninstalling stays a matter of deleting
+the app. The version check sends no identifiers or usage data; it's a one-way
+lookup, not telemetry.
+
+Prefer the terminal, or updating from a version too old to have the button? The
+install one-liner doubles as the updater:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/liotru-lab/claude-code-status-light/main/install.sh | bash
 ```
 
 It quits a running copy first (replacing a live `.app` in place is unsafe),
-installs the new build, and reopens it if it was running. Your hooks, callbacks,
-and settings live outside the bundle and are untouched.
+installs the new build, and reopens it if it was running. Either way your hooks,
+callbacks, and settings live outside the bundle and are untouched.
 
 ## Uninstall — leaves zero residue
 
