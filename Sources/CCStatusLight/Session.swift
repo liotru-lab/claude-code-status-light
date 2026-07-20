@@ -68,6 +68,12 @@ struct Marker: Codable {
     var pid: Int32?
     var event: String?
     var timestamp: Date?
+    /// Set while the session is blocked on a prompt, and *carried across* later
+    /// hook events by the hook itself. Needed because a background agent's
+    /// PostToolUse would otherwise overwrite the waiting state and leave the row
+    /// reading `working` forever — the transcript can't correct it, since Claude
+    /// Code doesn't flush a pending AskUserQuestion until it's answered.
+    var waitingSince: Date?
 }
 
 /// `/status`-style detail derived from the transcript, shown when a row is

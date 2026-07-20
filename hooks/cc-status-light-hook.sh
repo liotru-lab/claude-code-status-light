@@ -73,6 +73,31 @@ timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 dir="${HOME}/Library/Application Support/CCStatusLight/state"
 mkdir -p "$dir"
 
+# "Waiting on the user" has to be *sticky*, because every hook event overwrites
+# this marker and the last writer wins. A background agent running a tool fires
+# PostToolUse, which would otherwise erase the fact that the main thread is
+# blocked on a prompt — the session then reads `working` while it's actually
+# waiting, indefinitely (no further event ever corrects it). The transcript
+# can't rescue this either: Claude Code doesn't flush the pending
+# AskUserQuestion tool_use until it's answered.
+#
+# So record when the wait started and carry it across unrelated events. Only a
+# genuine "the user acted / the turn ended" signal clears it.
+prior="${dir}/${session_id}.json"
+waiting_since=""
+[ -f "$prior" ] && waiting_since="$(jq -r '.waiting_since // empty' "$prior" 2>/dev/null || true)"
+
+case "$event" in
+  PermissionRequest|Notification/permission_prompt|Notification/elicitation_dialog)
+    # Start the wait (keep the original start time if one is already running).
+    [ -n "$waiting_since" ] || waiting_since="$timestamp"
+    ;;
+  UserPromptSubmit|Stop|SessionEnd|SessionStart)
+    # The user answered, or the turn/session ended — the wait is over.
+    waiting_since=""
+    ;;
+esac
+
 tmp="$(mktemp "${dir}/.${session_id}.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 
@@ -84,8 +109,10 @@ jq -n \
   --arg transcript_path "$transcript" \
   --argjson pid "$pid" \
   --arg timestamp "$timestamp" \
+  --arg waiting_since "$waiting_since" \
   '{session_id:$session_id, state:$state, cwd:$cwd, event:$event,
-    transcript_path:$transcript_path, pid:$pid, timestamp:$timestamp}' \
+    transcript_path:$transcript_path, pid:$pid, timestamp:$timestamp}
+   + (if $waiting_since == "" then {} else {waiting_since:$waiting_since} end)' \
   > "$tmp"
 
 chmod 600 "$tmp"
