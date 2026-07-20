@@ -44,6 +44,18 @@ and constraints live in a separate hub document maintained by the maintainers.
   `completed` tool_result; async removed on a `queue-operation` completion
   notification); `end_turn`+question → attention; `turn_duration`/`idle_prompt`
   safety nets. It also reads the display name (`custom-title` › `ai-title` › `slug`).
+- **"Waiting on the user" is sticky, and lives in the marker, not the transcript**
+  (`waiting_since`). Every hook event overwrites the marker and the last writer
+  wins, so a *background agent's* `PostToolUse` used to erase the fact that the
+  main thread was blocked on a prompt — leaving the row `working` indefinitely,
+  since no later event corrects it (fixed in 0.5.2). The transcript cannot rescue
+  this: **Claude Code doesn't flush a pending `AskUserQuestion` tool_use until it
+  is answered**, so a currently-open question is simply absent from the JSONL.
+  The hook therefore carries `waiting_since` across unrelated events and clears it
+  only on `UserPromptSubmit`/`Stop`/`SessionEnd`/`SessionStart`. Never expire it on
+  a timer — answering can take many minutes. In the app it **outranks the
+  transcript state**: waiting beats agent activity, because the user is the
+  bottleneck (agents finish on their own; nothing proceeds until you answer).
 - **A pending question is cleared by its own tool_result** (`pendingQuestionId`).
   `AskUserQuestion`/`ExitPlanMode` set `.waiting`; the matching tool_result means
   the user answered, so the parser moves to `working`/"thinking". Without it the
