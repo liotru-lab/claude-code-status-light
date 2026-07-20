@@ -20,6 +20,11 @@ final class TranscriptParser {
     private(set) var state: State = .idle
     private(set) var activity: String = ""
     private(set) var lastLineTime: Date?   // newest envelope timestamp seen
+    /// Newest **main-thread** assistant message. Background agents write
+    /// `queue-operation` notifications (and their own sidechain files), so this
+    /// advances only when the orchestrator itself speaks — the signal that a
+    /// prompt was answered and work resumed. See `Marker.waitingSince`.
+    private(set) var lastMainAssistantTime: Date?
     private var activeAgents: Set<String> = []
     /// tool_use id of an outstanding AskUserQuestion / ExitPlanMode. Its
     /// tool_result means you answered, so the session stops "waiting" — without
@@ -134,7 +139,7 @@ final class TranscriptParser {
 
     private func resetMachine() {
         offset = 0; partial = Data()
-        state = .idle; activity = ""; lastLineTime = nil
+        state = .idle; activity = ""; lastLineTime = nil; lastMainAssistantTime = nil
         activeAgents.removeAll(); asyncAgents.removeAll()
         pendingQuestionId = nil
         compacting = false; sawAssistant = false
@@ -170,6 +175,11 @@ final class TranscriptParser {
         if let s = dict["slug"] as? String, !s.isEmpty { slug = s }
 
         if dict["isMeta"] as? Bool == true { return }
+
+        if type == "assistant", dict["isSidechain"] as? Bool != true,
+           let ts = dict["timestamp"] as? String, let d = Self.parseDate(ts) {
+            if lastMainAssistantTime == nil || d > lastMainAssistantTime! { lastMainAssistantTime = d }
+        }
 
         switch type {
         case "assistant":       processAssistant(dict)
