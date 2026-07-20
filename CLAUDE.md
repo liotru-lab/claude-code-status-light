@@ -160,6 +160,16 @@ and constraints live in a separate hub document maintained by the maintainers.
 
 ## Hooks
 
+- **The staged hook is a separate copy, and updating the app does not re-stage
+  it.** `settings.json` points at
+  `~/Library/Application Support/CCStatusLight/hooks/`, so a fix spanning both
+  halves (like `waiting_since` in 0.5.2) silently half-applies: the app reads a
+  field nothing writes, and states are quietly wrong. `HookStatus.isStale`
+  compares the staged script against the bundled one and the window shows a
+  **Hooks are out of date** banner with a one-click Refresh
+  (`refreshStagedHook`, which only touches our own file in our own directory, so
+  it needs no settings.json edit or confirmation). **Any change to
+  `hooks/cc-status-light-hook.sh` must ship with this in mind.**
 - `install-hooks.sh` is the only thing that writes `~/.claude/settings.json`, and
   only after showing a diff, backing up, and confirming. It must stay idempotent
   and its `--uninstall` must remove only our own entries. Never write

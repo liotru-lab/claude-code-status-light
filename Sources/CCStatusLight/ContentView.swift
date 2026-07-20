@@ -36,6 +36,10 @@ struct ContentView: View {
                 }
                 .listStyle(.inset)
             }
+            if store.hooksStale {
+                Divider()
+                hookStaleBanner
+            }
             if updates.shouldNotify, let latest = updates.latestVersion {
                 Divider()
                 updateBanner(latest)
@@ -44,6 +48,30 @@ struct ContentView: View {
             footer
         }
         .frame(minWidth: 200, minHeight: 200)
+    }
+
+    /// The staged hook is older than the one this build ships. That silently
+    /// breaks any fix spanning app + hook, so it's worth saying loudly — and it's
+    /// one click to fix, since settings.json already points at the staged path.
+    private var hookStaleBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Hooks are out of date")
+                    .font(.caption.weight(.medium))
+                Text("Session states may be wrong until you refresh them.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Refresh") {
+                HookStatus.refreshStagedHook()
+                store.refresh()
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
     }
 
     /// Quiet, dismissible notice — informational, never a modal interruption.
