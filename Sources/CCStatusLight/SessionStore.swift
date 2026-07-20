@@ -93,7 +93,22 @@ final class SessionScanner {
             // agent activity here. Cleared only by UserPromptSubmit/Stop/
             // SessionEnd (see the hook), never by a timeout, because answering
             // can legitimately take many minutes.
-            if live, marker.waitingSince != nil {
+            // A permission prompt is resolved by approving it, which fires
+            // PostToolUse -- not UserPromptSubmit -- so the hook alone can never
+            // learn the wait ended. The transcript can: only the orchestrator
+            // writes non-sidechain assistant messages (background agents emit
+            // `queue-operation` notifications and their own sidechain files), so
+            // a main-thread assistant message newer than the wait means the
+            // prompt was answered and work resumed.
+            var stillWaiting = false
+            if live, let waitingSince = marker.waitingSince {
+                if let resumed = parser?.lastMainAssistantTime {
+                    stillWaiting = resumed <= waitingSince
+                } else {
+                    stillWaiting = true
+                }
+            }
+            if stillWaiting {
                 state = .notification
                 activity = "waiting for you"
             } else if live, marker.state == .notification {

@@ -53,7 +53,15 @@ and constraints live in a separate hub document maintained by the maintainers.
   is answered**, so a currently-open question is simply absent from the JSONL.
   The hook therefore carries `waiting_since` across unrelated events and clears it
   only on `UserPromptSubmit`/`Stop`/`SessionEnd`/`SessionStart`. Never expire it on
-  a timer — answering can take many minutes. In the app it **outranks the
+  a timer — answering can take many minutes.
+  **The hook alone cannot detect the end of the wait**: a *permission* prompt is
+  resolved by approving it, which fires `PostToolUse`, not `UserPromptSubmit` —
+  and `PostToolUse` is exactly what must not clear the wait. So the app clears it
+  from the transcript instead: only the orchestrator writes non-sidechain
+  `assistant` messages (background agents emit `queue-operation` notifications and
+  write to their own sidechain files), so `lastMainAssistantTime > waitingSince`
+  means the prompt was answered and work resumed (fixed in 0.5.4; 0.5.3 stuck
+  permanently red). In the app it **outranks the
   transcript state**: waiting beats agent activity, because the user is the
   bottleneck (agents finish on their own; nothing proceeds until you answer).
 - **A pending question is cleared by its own tool_result** (`pendingQuestionId`).
