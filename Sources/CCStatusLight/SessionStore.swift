@@ -87,7 +87,16 @@ final class SessionScanner {
             // newer than the marker, the prompt was answered and work resumed, so
             // a live state must win over the stale marker. (2s tolerance absorbs
             // the marker's whole-second timestamp truncation.)
-            if live, marker.state == .notification {
+            // A sticky wait outranks everything the transcript can say. The user
+            // is the bottleneck: background agents will finish on their own, but
+            // nothing proceeds until the prompt is answered — so Attention beats
+            // agent activity here. Cleared only by UserPromptSubmit/Stop/
+            // SessionEnd (see the hook), never by a timeout, because answering
+            // can legitimately take many minutes.
+            if live, marker.waitingSince != nil {
+                state = .notification
+                activity = "waiting for you"
+            } else if live, marker.state == .notification {
                 let transcriptMovedOn: Bool
                 if let last = parser?.lastLineTime, let mt = marker.timestamp {
                     transcriptMovedOn = last.timeIntervalSince(mt) > 2
