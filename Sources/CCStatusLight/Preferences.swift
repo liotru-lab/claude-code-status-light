@@ -113,7 +113,7 @@ struct PreferencesView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Toggle("Show plan usage", isOn: $usage.enabled)
                     .font(.headline)
-                Text("Shows your Max plan's session and weekly usage bars in the footer — the same numbers as Claude's Settings ▸ Usage. This is the one feature that reads your Claude Code login (from the keychain, so macOS asks the first time) and talks to api.anthropic.com. The token is read-only and never leaves that call; off by default.")
+                Text("Shows your Max plan's session and weekly usage bars in the footer — the same numbers as Claude's Settings ▸ Usage. It reads your Claude Code login from the keychain (macOS asks the first time) only when you open the usage panel — never on a background timer — so it won't interrupt you while you work. The token is read-only and talks only to api.anthropic.com; off by default.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if usage.enabled, let err = usage.lastError {

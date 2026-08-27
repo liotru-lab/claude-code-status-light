@@ -39,21 +39,24 @@ final class UsageStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var lastError: String?
 
+    /// True once a fetch fails auth even after re-reading the Keychain — the login
+    /// needs refreshing in Claude Code. The panel shows a Reconnect button instead
+    /// of anything popping up on its own.
+    @Published private(set) var needsReauth = false
+
     @Published var enabled: Bool {
         didSet {
             UserDefaults.standard.set(enabled, forKey: Self.enabledKey)
-            if enabled { scheduleTimer(); refresh() }
-            else { timer?.invalidate(); timer = nil; snapshot = UsageSnapshot(); lastError = nil; cachedToken = nil }
+            // Turning it on is a deliberate action, so a one-off Keychain read
+            // here is expected. Turning it off forgets everything held in memory.
+            if enabled { refresh() }
+            else { snapshot = UsageSnapshot(); lastError = nil; needsReauth = false; cachedToken = nil }
         }
     }
 
     static let enabledKey = "showPlanUsage"
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private static let keychainService = "Claude Code-credentials"
-    /// Usage moves slowly; a few minutes is plenty and stays polite to the API.
-    private static let interval: TimeInterval = 5 * 60
-
-    private var timer: Timer?
 
     /// Highest severity across the bars — drives an at-a-glance footer tint.
     var worstSeverity: UsageLimit.Severity {
@@ -68,19 +71,20 @@ final class UsageStore: ObservableObject {
     }
 
     init() {
+        // didSet does not fire during init, so this never reads the Keychain on
+        // launch — reads happen only when you look at usage (open the popover) or
+        // toggle the feature on. No background timer means no surprise prompt
+        // while you're working on something else.
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)   // default false
-        if enabled { scheduleTimer(); refresh() }
     }
 
-    deinit { timer?.invalidate() }
-
-    private func scheduleTimer() {
-        timer?.invalidate()
-        let t = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+    /// User asked to re-read the login (e.g. after signing back into Claude Code).
+    /// Drops the cached token so the next fetch goes to the Keychain.
+    func reconnect() {
+        cachedToken = nil
+        needsReauth = false
+        lastError = nil
+        refresh()
     }
 
     /// Token held in memory after the first successful Keychain read, so routine
@@ -118,7 +122,8 @@ final class UsageStore: ObservableObject {
             fetch(bearer: t, allowKeychainRetry: false)
         case .notFound:
             isLoading = false
-            lastError = "Not logged into Claude Code (no login found in your keychain)."
+            needsReauth = true
+            lastError = "Not logged into Claude Code. Sign in there, then Reconnect."
         case .denied:
             isLoading = false
             lastError = "Keychain access denied. Allow it for CC Status Light, or turn this off."
@@ -167,9 +172,17 @@ final class UsageStore: ObservableObject {
                 if let limits {
                     self.snapshot = UsageSnapshot(limits: limits, fetchedAt: Date())
                     self.lastError = nil
+                    self.needsReauth = false
                 } else {
-                    if unauthorized { self.cachedToken = nil }
-                    self.lastError = failure
+                    // A 401 that survived the Keychain re-read means the stored
+                    // login itself is stale — sign in to Claude Code, then Reconnect.
+                    if unauthorized {
+                        self.cachedToken = nil
+                        self.needsReauth = true
+                        self.lastError = "Claude Code login expired. Sign in there, then Reconnect."
+                    } else {
+                        self.lastError = failure
+                    }
                 }
             }
         }.resume()

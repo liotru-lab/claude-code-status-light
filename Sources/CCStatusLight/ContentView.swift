@@ -249,9 +249,14 @@ struct UsageView: View {
             }
 
             if let err = usage.lastError {
-                Label(err, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(err, systemImage: usage.needsReauth ? "person.badge.key" : "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(usage.needsReauth ? "Reconnect" : "Try again") { usage.reconnect() }
+                        .controlSize(.small)
+                        .disabled(usage.isLoading)
+                }
             } else if usage.snapshot.limits.isEmpty {
                 Text(usage.isLoading ? "Loading…" : "No usage data.")
                     .font(.caption).foregroundStyle(.secondary)
