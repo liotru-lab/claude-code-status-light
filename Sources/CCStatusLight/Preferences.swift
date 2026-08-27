@@ -60,6 +60,16 @@ struct PreferencesView: View {
     @ObservedObject var updates: UpdateChecker
     @ObservedObject var updater: SelfUpdater
     @ObservedObject var usage: UsageStore
+    @AppStorage(SessionStore.autoCleanHoursKey) private var staleHours = 24
+
+    private static func staleLabel(_ h: Int) -> String {
+        switch h {
+        case 0:  return "Never"
+        case 1:  return "1 hour"
+        case 24: return "1 day"
+        default: return "\(h) hours"
+        }
+    }
 
     private static let rows: [(state: String, label: String, color: Color)] = [
         ("notification", "Attention", .red),
@@ -107,6 +117,24 @@ struct PreferencesView: View {
 
             Text("Placeholders: {state} {color} {count} {name}")
                 .font(.caption2).foregroundStyle(.tertiary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Remove inactive sessions after").font(.headline)
+                    Spacer()
+                    Picker("", selection: $staleHours) {
+                        ForEach(SessionStore.autoCleanChoices, id: \.self) { h in
+                            Text(Self.staleLabel(h)).tag(h)
+                        }
+                    }
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                }
+                Text("Idle sessions quiet for this long drop off the list. Working sessions are never removed, and a hidden one reappears if it becomes active again. Right-click any row to remove it now.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Divider()
 

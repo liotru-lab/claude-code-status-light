@@ -36,6 +36,9 @@ struct ContentView: View {
                     SessionRow(session: session,
                                isExpanded: expandedBinding(session.id),
                                onRefresh: { store.refresh() })
+                        .contextMenu {
+                            Button("Remove from List") { store.remove(session.id) }
+                        }
                 }
                 .listStyle(.inset)
             }
