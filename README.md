@@ -5,7 +5,7 @@ doing — one row each, in a single window.
 
 Native Swift + SwiftUI (AppKit-managed window).
 
-![CC Status Light listing five Claude Code sessions with colour-coded states (Working, Attention, Ready, Idle) and a subagent-count badge; the top row is expanded to show its detail — model (Opus 4.8), Claude Code version, git branch, permission mode, and context tokens in use](docs/screenshot.png)
+![CC Status Light: six Claude Code sessions in one window with colour-coded states — two working (one Editing, one Running command with a 2-subagent badge), one needing Attention, one Ready, and two Idle — each row showing the session name and working directory, and a plan-usage gauge in the footer](docs/screenshot.png)
 
 ## What it shows
 
@@ -35,12 +35,18 @@ you ever want to poke a session by hand.
 Closing the window keeps the app running in the background; the dock icon reopens
 it. There's an optional **Show on all Spaces** toggle.
 
+**Sessions tidy themselves.** Idle sessions you've stepped away from drop off the
+list after a delay you set (Settings ▸ Sessions — default **1 day**), and you can
+**right-click any row → Remove from List** to clear one now. Working and
+waiting-on-you sessions are never removed, and a hidden session reappears the
+moment it becomes active again.
+
 **Click a session** to expand its detail (and force a fresh re-parse) — model
 (e.g. Opus 4.8), Claude Code version, git branch, permission mode, and
-context-window tokens in use. The footer
-**account** button (👤) shows who you're signed in as and lifetime usage
-(sessions, messages, per-model tokens), read from Claude Code's own files. (The
-live `/status` rate-limit bars aren't shown — that data isn't stored locally.)
+context-window tokens in use. The footer has an **account** button (👤) for who
+you're signed in as and lifetime usage (read from Claude Code's own files), an
+optional **usage gauge** for your plan's live session and weekly limits (see
+[Plan usage](#plan-usage-optional)), and a legend (?) for the states.
 
 ## Install
 
@@ -154,20 +160,30 @@ lives next to it in `callbacks.json`; both are removed by the uninstall below.
 
 ## Plan usage (optional)
 
-Turn on **Show plan usage** in Settings to see your Max plan's **session and
-weekly limit bars** in the footer — the same numbers as Claude's Settings ▸
-Usage, which nothing local otherwise exposes. A compact "21%" sits in the footer;
-click it for the full breakdown (session, weekly all-models, weekly per-model)
-with reset times.
+See your plan's **session and weekly limit bars** right in the footer — the same
+numbers as Claude's Settings ▸ Usage (Pro, Max, or Team), which nothing local
+otherwise exposes. A compact "21%" sits in the footer; click it for the full
+breakdown — current session, weekly all-models, and per-model — each with its
+reset time and labelled with your plan.
+
+![The plan-usage popover: session and weekly limit bars with reset times, labelled Max 5×](docs/usage.png)
+
+It's **off by default**. The footer gauge is also the on-switch: click it and a
+short notice explains exactly what enabling does *before* anything happens, with
+an **Enable** button. (Turn it back off in Settings ▸ Usage, where you can also
+pick how often it refreshes.)
 
 This is the **only** feature that reads a credential or makes a network call, so
-it's **off by default** and fenced deliberately:
+it's fenced deliberately:
 
 - It reads your Claude Code login from the **keychain** — so macOS asks your
   permission the first time ("CC Status Light wants to use *Claude Code-credentials*").
+  Choose **Always Allow** and it stays quiet afterwards.
 - The token is **read-only**: the app never refreshes, writes, logs, or stores it,
   and it goes to **`api.anthropic.com` and nowhere else**.
-- If you're not logged into Claude Code, it simply says so.
+- Refreshes happen in the background over the network (no repeat keychain access);
+  if you're not signed in, or the login expires, the panel shows a **Reconnect**
+  button rather than nagging you.
 
 Everything else in the app remains local and credential-free.
 
