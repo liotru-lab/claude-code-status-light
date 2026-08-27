@@ -171,6 +171,12 @@ otherwise exposes. A compact "21%" sits in the footer; click it for the full
 breakdown — current session, weekly all-models, and per-model — each with its
 reset time and labelled with your plan.
 
+> **Early support — plan limits only.** This is an initial version. It reflects
+> your **plan's usage thresholds** (the session and weekly limit bars) and
+> nothing more. It does **not** yet handle **token-based usage** (pay-as-you-go /
+> API-key accounts) or **extra usage / credits** consumed past your plan limit.
+> Those may come later.
+
 ![The plan-usage popover: session and weekly limit bars with reset times, labelled Max 5×](docs/usage.png)
 
 It's **off by default**. The footer gauge is also the on-switch: click it and a
