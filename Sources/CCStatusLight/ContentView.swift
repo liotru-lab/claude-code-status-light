@@ -115,6 +115,18 @@ struct ContentView: View {
         .padding(.vertical, 6)
     }
 
+    /// Footer gauge colour. Resting reads in the primary label colour (not the
+    /// muted secondary), so usage is legible at a glance; colour is reserved for
+    /// something that actually wants attention.
+    private var usageTint: Color {
+        if usage.needsReauth { return .orange }
+        switch usage.worstSeverity {
+        case .warning:  return .orange
+        case .critical: return .red
+        default:        return .primary
+        }
+    }
+
     private func expandedBinding(_ id: String) -> Binding<Bool> {
         Binding(
             get: { expanded.contains(id) },
@@ -170,7 +182,7 @@ struct ContentView: View {
                 .fixedSize()
             if usage.enabled {
                 Button {
-                    if !showUsage { usage.refresh(interactive: true) }
+                    if !showUsage { usage.refresh() }
                     showUsage.toggle()
                 } label: {
                     HStack(spacing: 3) {
@@ -182,12 +194,10 @@ struct ContentView: View {
                             Text("\(p)%").font(.caption2.weight(.medium))
                         }
                     }
-                    // Orange when the login needs reconnecting; otherwise tint by
-                    // how close to a limit the numbers are.
-                    .foregroundStyle(usage.needsReauth ? .orange : usage.worstSeverity.tint)
-                    // Dim whenever the number isn't current — token expired
-                    // (background-only since) or the login is dead. A look refreshes.
-                    .opacity((usage.isStale || usage.needsReauth) ? 0.45 : 1)
+                    // Legible at rest (primary), escalating to orange as a limit
+                    // gets close and red when it's nearly hit; orange for a login
+                    // that needs reconnecting.
+                    .foregroundStyle(usageTint)
                 }
                 .buttonStyle(.borderless)
                 .help("Plan usage (session & weekly limits)")
@@ -250,7 +260,7 @@ struct UsageView: View {
             HStack {
                 Text("Plan usage").font(.headline)
                 Spacer()
-                Button { usage.refresh(interactive: true) } label: { Image(systemName: "arrow.clockwise") }
+                Button { usage.refresh() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
                     .disabled(usage.isLoading)
                     .help("Refresh")
