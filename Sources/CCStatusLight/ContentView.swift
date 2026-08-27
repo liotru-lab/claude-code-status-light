@@ -289,19 +289,28 @@ struct UsageView: View {
                     .help("Refresh")
             }
 
+            // A problem shows as a notice on top — it never hides the stored
+            // numbers below, so a rate-limit or a dropped connection still leaves
+            // you looking at the last known usage (with its timestamp).
             if let err = usage.lastError {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(err, systemImage: usage.needsReauth ? "person.badge.key" : "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.orange)
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: usage.needsReauth ? "person.badge.key" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange).font(.caption)
+                    // Message in the primary label colour so it's legible on the
+                    // popover grey; orange stays as the icon + banner tint.
+                    Text(err).font(.caption).foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
                     Button(usage.needsReauth ? "Reconnect" : "Try again") { usage.reconnect() }
                         .controlSize(.small)
                         .disabled(usage.isLoading)
                 }
-            } else if usage.snapshot.limits.isEmpty {
-                Text(usage.isLoading ? "Loading…" : "No usage data.")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
+                .padding(8)
+                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.35)))
+            }
+
+            if !usage.snapshot.limits.isEmpty {
                 ForEach(usage.snapshot.limits) { limit in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
@@ -325,11 +334,13 @@ struct UsageView: View {
                         }
                     }
                 }
-            }
-
-            if let at = usage.snapshot.fetchedAt {
-                Text("Updated \(at, style: .relative) ago")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                if let at = usage.snapshot.fetchedAt {
+                    Text("Updated \(at, style: .relative) ago")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+            } else if usage.lastError == nil {
+                Text(usage.isLoading ? "Loading…" : "No usage data.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(14)
