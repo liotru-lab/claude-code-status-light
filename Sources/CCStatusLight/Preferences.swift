@@ -80,46 +80,77 @@ struct PreferencesView: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Run a command when the overall state changes", isOn: $settings.enabled)
-                    .font(.headline)
-                Text("The most urgent live session drives it — Attention beats Working beats Ready beats Idle. Any shell command works (a busylight, a notification, a sound, a webhook…).")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        TabView {
+            callbacksTab.tabItem { Label("Callbacks", systemImage: "terminal") }
+            sessionsTab.tabItem { Label("Sessions", systemImage: "list.bullet.rectangle") }
+            usageTab.tabItem { Label("Usage", systemImage: "gauge.with.dots.needle.50percent") }
+            updatesTab.tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+        }
+        .frame(width: 470, height: 360)
+        .onAppear { settings.reload() }
+    }
 
-            HStack(spacing: 8) {
-                Text("Presets:").font(.caption).foregroundStyle(.secondary)
-                Menu("Load example…") {
-                    ForEach(CallbackConfig.presets, id: \.name) { preset in
-                        Button(preset.name) { settings.applyPreset(preset.commands) }
+    /// Common tab chrome: padded, top-left aligned, fills the fixed window.
+    private func tab<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var callbacksTab: some View {
+        tab {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Run a command when the overall state changes", isOn: $settings.enabled)
+                        .font(.headline)
+                    Text("The most urgent live session drives it — Attention beats Working beats Ready beats Idle. Any shell command works (a busylight, a notification, a sound, a webhook…).")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 8) {
+                    Text("Presets:").font(.caption).foregroundStyle(.secondary)
+                    Menu("Load example…") {
+                        ForEach(CallbackConfig.presets, id: \.name) { preset in
+                            Button(preset.name) { settings.applyPreset(preset.commands) }
+                        }
+                    }
+                    .fixedSize()
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Self.rows, id: \.state) { row in
+                        HStack(spacing: 8) {
+                            Circle().fill(row.color).frame(width: 8, height: 8)
+                            Text(row.label).frame(width: 78, alignment: .leading)
+                            TextField("command", text: settings.command(for: row.state))
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.caption, design: .monospaced))
+                            Button("Test") { settings.test(row.state) }
+                                .disabled((settings.commands[row.state] ?? "").isEmpty)
+                        }
                     }
                 }
-                .fixedSize()
-            }
 
-            Divider()
+                Text("Placeholders: {state} {color} {count} {name}")
+                    .font(.caption2).foregroundStyle(.tertiary)
 
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Self.rows, id: \.state) { row in
-                    HStack(spacing: 8) {
-                        Circle().fill(row.color).frame(width: 8, height: 8)
-                        Text(row.label).frame(width: 78, alignment: .leading)
-                        TextField("command", text: settings.command(for: row.state))
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.caption, design: .monospaced))
-                        Button("Test") { settings.test(row.state) }
-                            .disabled((settings.commands[row.state] ?? "").isEmpty)
-                    }
+                Spacer(minLength: 4)
+
+                HStack {
+                    Button("Reveal config") { settings.reveal(CallbackEngine.configURL) }
+                    Button("Reveal log") { settings.reveal(CallbackEngine.logURL) }
+                    Spacer()
                 }
+                .controlSize(.small)
             }
+        }
+    }
 
-            Text("Placeholders: {state} {color} {count} {name}")
-                .font(.caption2).foregroundStyle(.tertiary)
-
-            Divider()
-
+    private var sessionsTab: some View {
+        tab {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Remove inactive sessions after").font(.headline)
@@ -135,10 +166,12 @@ struct PreferencesView: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 4) {
+    private var usageTab: some View {
+        tab {
+            VStack(alignment: .leading, spacing: 8) {
                 Toggle("Show plan usage", isOn: $usage.enabled)
                     .font(.headline)
                 Text("Shows your plan's session and weekly usage bars in the footer — the same numbers as Claude's Settings ▸ Usage. It reads your Claude Code login from the keychain; macOS asks the first time, and choosing “Always Allow” keeps it silent afterwards. The token is read-only and talks only to api.anthropic.com; off by default.")
@@ -150,20 +183,19 @@ struct PreferencesView: View {
                             Text("\(m) min").tag(m)
                         }
                     }
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                    .font(.caption)
-                    .padding(.top, 2)
+                    .pickerStyle(.menu).fixedSize().font(.caption)
                     if let err = usage.lastError {
                         Text(err).font(.caption).foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
+        }
+    }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 4) {
+    private var updatesTab: some View {
+        tab {
+            VStack(alignment: .leading, spacing: 8) {
                 Toggle("Check for new versions", isOn: $updates.automatic)
                     .font(.headline)
                 Text("Asks GitHub once a day whether a newer release exists, so you don't sit on a version with a bug that's already fixed. Nothing about you or your sessions is sent, and nothing is downloaded or installed — it only tells you, and points at the release notes.")
@@ -187,27 +219,15 @@ struct PreferencesView: View {
                         Link("Release notes", destination: UpdateChecker.releasesPage)
                             .font(.caption)
                     } else if updates.lastChecked != nil {
-                        Text("Up to date (\(UpdateChecker.currentVersion))")
-                            .font(.caption).foregroundStyle(.secondary)
+                        Text("Up to date").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .controlSize(.small)
-                .padding(.top, 2)
-            }
 
-            Divider()
-
-            HStack {
-                Button("Reveal config") { settings.reveal(CallbackEngine.configURL) }
-                Button("Reveal log") { settings.reveal(CallbackEngine.logURL) }
-                Spacer()
-                Text("v\(UpdateChecker.currentVersion)")
+                Spacer(minLength: 4)
+                Text("CC Status Light v\(UpdateChecker.currentVersion)")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
-            .controlSize(.small)
         }
-        .padding(18)
-        .frame(width: 460)
-        .onAppear { settings.reload() }
     }
 }
