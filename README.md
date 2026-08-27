@@ -41,6 +41,8 @@ list after a delay you set (Settings ▸ Sessions — default **1 day**), and yo
 waiting-on-you sessions are never removed, and a hidden session reappears the
 moment it becomes active again.
 
+![Settings ▸ Sessions — “Remove inactive sessions after” with Never / 1 hour / 4 hours / 1 day](docs/settings-sessions.png)
+
 **Click a session** to expand its detail (and force a fresh re-parse) — model
 (e.g. Opus 4.8), Claude Code version, git branch, permission mode, and
 context-window tokens in use. The footer has an **account** button (👤) for who
@@ -137,8 +139,9 @@ leaving any other hooks (e.g. a busylight) untouched. It never writes
 ## Callbacks (busylight, notifications, …)
 
 CC Status Light can run a command whenever the **overall** state changes, so a
-single indicator reflects your most urgent session. Open **CC Status Light ▸
-Settings…** (⌘,):
+single indicator reflects your most urgent session. Settings (⌘,) is organized
+into tabs — **Callbacks · Sessions · Usage · Updates**; this lives on the
+**Callbacks** tab:
 
 - Toggle **Run a command when the overall state changes**.
 - Edit a command per state — **Attention · Working · Ready · Idle · No sessions** —
@@ -146,6 +149,8 @@ Settings…** (⌘,):
 - **Presets**: a busylight, a macOS notification on Attention, or a sound on
   Attention. Any shell command works — a smart bulb via `curl`, a Stream Deck key,
   a webhook…
+
+![Settings ▸ Callbacks — a shell command per state (Attention, Working, Ready, Idle, No sessions) each with a Test button, plus presets](docs/settings-callbacks.png)
 
 The aggregate uses its own urgency order — **Attention > Working > Ready > Idle >
 none** — so with several sessions the light goes red the moment *one* needs you,
@@ -173,6 +178,8 @@ short notice explains exactly what enabling does *before* anything happens, with
 an **Enable** button. (Turn it back off in Settings ▸ Usage, where you can also
 pick how often it refreshes.)
 
+![Settings ▸ Usage — “Show plan usage” toggle with a refresh-interval picker](docs/settings-usage.png)
+
 This is the **only** feature that reads a credential or makes a network call, so
 it's fenced deliberately:
 
@@ -193,6 +200,8 @@ Everything else in the app remains local and credential-free.
 exists and tells you — nothing more. There's also a **Check for new versions**
 toggle in Settings for a once-a-day check, **off by default**, so out of the box
 the app makes no network requests at all.
+
+![Settings ▸ Updates — “Check for new versions” toggle with a Check now button](docs/settings-updates.png)
 
 When a newer version exists you get a dismissible banner with an **Update Now**
 button. It downloads the release, **verifies it's signed by this project's Apple
