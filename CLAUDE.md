@@ -64,6 +64,13 @@ and constraints live in a separate hub document maintained by the maintainers.
   permanently red). In the app it **outranks the
   transcript state**: waiting beats agent activity, because the user is the
   bottleneck (agents finish on their own; nothing proceeds until you answer).
+- **Local-command echoes are not prompts** (`isLocalCommandEcho`). The `!`-bash
+  feature (`<bash-input>`/`<bash-stdout>`/`<bash-stderr>`), slash commands
+  (`<command-name>`…), and `<local-command-…>` notices are logged as `user`
+  messages *with a promptId*, but no assistant turn follows them. Treated as
+  prompts they strand a session in `working`/"thinking" forever — and they're
+  exactly what tends to be the last line before someone steps away from a
+  terminal. The parser ignores them when deciding a new turn started.
 - **A pending question is cleared by its own tool_result** (`pendingQuestionId`).
   `AskUserQuestion`/`ExitPlanMode` set `.waiting`; the matching tool_result means
   the user answered, so the parser moves to `working`/"thinking". Without it the
@@ -165,6 +172,29 @@ and constraints live in a separate hub document maintained by the maintainers.
   place must do the same.
 - Exercise the whole path headlessly with `CCStatusLight --self-update`
   (`SelfUpdater.onHandoff` is the seam that lets it run without an NSApplication).
+
+## Plan usage (the one networked, credentialed feature)
+
+- `UsageStore` fetches `GET https://api.anthropic.com/api/oauth/usage` — the exact
+  data behind Claude's **Settings ▸ Usage** (5-hour session %, weekly all-models,
+  weekly per-model), which the transcript and local caches do **not** carry. The
+  response's `limits` array is the parse target (`kind` session/weekly_all/
+  weekly_scoped, `percent`, `resets_at`, `severity`, `scope.model.display_name`).
+- **This is the only feature that leaves the machine or touches a credential**, so
+  it's fenced hard: **off by default** (`showPlanUsage`, like the update check);
+  the bearer token is **read-only** (we never refresh or write it — Claude Code
+  keeps it fresh; an expired token surfaces as a hint); the token goes to
+  **api.anthropic.com and nowhere else**, never logged or persisted.
+- Token comes from the Keychain item `Claude Code-credentials`, matched by
+  **`account == NSUserName()`** (with a service-only fallback) so the *current
+  user's* item is chosen deterministically. The login keychain is already
+  per-macOS-user. Reading another app's item triggers a **one-time macOS consent
+  prompt** — that dialog, showing our `CFBundleDisplayName` ("CC Status Light"),
+  is the real access gate. **Read the Keychain off the main thread** — the consent
+  prompt blocks `SecItemCopyMatching` synchronously and would freeze the UI.
+  Verify headlessly with `CCStatusLight --usage`.
+- This reverses the earlier "no cloud / no tokens / rate-limit bars not available"
+  stance — a deliberate, opt-in amendment, not a drift.
 
 ## Hooks
 

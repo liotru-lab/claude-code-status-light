@@ -152,6 +152,25 @@ lives next to it in `callbacks.json`; both are removed by the uninstall below.
 > `~/.claude/settings.json` — remove those so they don't fight the app over the
 > one light.
 
+## Plan usage (optional)
+
+Turn on **Show plan usage** in Settings to see your Max plan's **session and
+weekly limit bars** in the footer — the same numbers as Claude's Settings ▸
+Usage, which nothing local otherwise exposes. A compact "21%" sits in the footer;
+click it for the full breakdown (session, weekly all-models, weekly per-model)
+with reset times.
+
+This is the **only** feature that reads a credential or makes a network call, so
+it's **off by default** and fenced deliberately:
+
+- It reads your Claude Code login from the **keychain** — so macOS asks your
+  permission the first time ("CC Status Light wants to use *Claude Code-credentials*").
+- The token is **read-only**: the app never refreshes, writes, logs, or stores it,
+  and it goes to **`api.anthropic.com` and nowhere else**.
+- If you're not logged into Claude Code, it simply says so.
+
+Everything else in the app remains local and credential-free.
+
 ## Update check
 
 **CC Status Light ▸ Check for Updates…** asks GitHub whether a newer release

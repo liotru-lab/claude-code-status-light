@@ -20,6 +20,8 @@ struct ContentView: View {
     @EnvironmentObject var windowState: WindowState
     @EnvironmentObject var updates: UpdateChecker
     @EnvironmentObject var updater: SelfUpdater
+    @EnvironmentObject var usage: UsageStore
+    @State private var showUsage = false
     @State private var showLegend = false
     @State private var showEnvironment = false
     @State private var expanded: Set<String> = []
@@ -166,6 +168,25 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
+            if usage.enabled {
+                Button {
+                    if !showUsage { usage.refresh() }
+                    showUsage.toggle()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "gauge.with.dots.needle.50percent")
+                        if let p = usage.sessionPercent {
+                            Text("\(p)%").font(.caption2.weight(.medium))
+                        }
+                    }
+                    .foregroundStyle(usage.worstSeverity.tint)
+                }
+                .buttonStyle(.borderless)
+                .help("Plan usage (session & weekly limits)")
+                .popover(isPresented: $showUsage, arrowEdge: .bottom) {
+                    UsageView(usage: usage)
+                }
+            }
             Button {
                 if !showEnvironment { environment.refresh() }
                 showEnvironment.toggle()
@@ -190,6 +211,91 @@ struct ContentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+extension UsageLimit.Severity {
+    /// At-a-glance colour: green until it's worth noticing, then amber, then red.
+    var tint: Color {
+        switch self {
+        case .normal, .unknown: return .secondary
+        case .warning:          return .orange
+        case .critical:         return .red
+        }
+    }
+    /// Bar fill (distinct from the icon tint, which stays subtle when normal).
+    var barColor: Color {
+        switch self {
+        case .normal, .unknown: return .accentColor
+        case .warning:          return .orange
+        case .critical:         return .red
+        }
+    }
+}
+
+/// Plan-usage popover: the session and weekly bars from Claude's Settings ▸ Usage.
+struct UsageView: View {
+    @ObservedObject var usage: UsageStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Plan usage").font(.headline)
+                Spacer()
+                Button { usage.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .disabled(usage.isLoading)
+                    .help("Refresh")
+            }
+
+            if let err = usage.lastError {
+                Label(err, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if usage.snapshot.limits.isEmpty {
+                Text(usage.isLoading ? "Loading…" : "No usage data.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                ForEach(usage.snapshot.limits) { limit in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(limit.title).font(.subheadline)
+                            Spacer()
+                            Text("\(limit.percent)%")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(limit.severity.barColor)
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.secondary.opacity(0.2))
+                                Capsule().fill(limit.severity.barColor)
+                                    .frame(width: geo.size.width * min(1, Double(limit.percent) / 100))
+                            }
+                        }
+                        .frame(height: 6)
+                        if let reset = limit.resetsAt {
+                            Text("Resets \(reset, format: resetFormat(reset))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            if let at = usage.snapshot.fetchedAt {
+                Text("Updated \(at, style: .relative) ago")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(14)
+        .frame(width: 280)
+    }
+
+    /// Show a time-of-day for a same-day reset, else weekday + time.
+    private func resetFormat(_ date: Date) -> Date.FormatStyle {
+        let sameDay = Calendar.current.isDate(date, inSameDayAs: Date())
+        return sameDay
+            ? .dateTime.hour().minute()
+            : .dateTime.weekday(.abbreviated).hour().minute()
     }
 }
 

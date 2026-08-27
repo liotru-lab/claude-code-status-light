@@ -59,6 +59,7 @@ struct PreferencesView: View {
     @ObservedObject var settings: CallbackSettings
     @ObservedObject var updates: UpdateChecker
     @ObservedObject var updater: SelfUpdater
+    @ObservedObject var usage: UsageStore
 
     private static let rows: [(state: String, label: String, color: Color)] = [
         ("notification", "Attention", .red),
@@ -106,6 +107,20 @@ struct PreferencesView: View {
 
             Text("Placeholders: {state} {color} {count} {name}")
                 .font(.caption2).foregroundStyle(.tertiary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Show plan usage", isOn: $usage.enabled)
+                    .font(.headline)
+                Text("Shows your Max plan's session and weekly usage bars in the footer — the same numbers as Claude's Settings ▸ Usage. This is the one feature that reads your Claude Code login (from the keychain, so macOS asks the first time) and talks to api.anthropic.com. The token is read-only and never leaves that call; off by default.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if usage.enabled, let err = usage.lastError {
+                    Text(err).font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
 
             Divider()
 
