@@ -79,14 +79,35 @@ struct PreferencesView: View {
         ("none", "No sessions", .gray),
     ]
 
+    @State private var tab = 0
+
     var body: some View {
-        TabView {
-            callbacksTab.tabItem { Label("Callbacks", systemImage: "terminal") }
-            sessionsTab.tabItem { Label("Sessions", systemImage: "list.bullet.rectangle") }
-            usageTab.tabItem { Label("Usage", systemImage: "gauge.with.dots.needle.50percent") }
-            updatesTab.tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+        VStack(spacing: 0) {
+            Picker("", selection: $tab) {
+                Text("Callbacks").tag(0)
+                Text("Sessions").tag(1)
+                Text("Usage").tag(2)
+                Text("Updates").tag(3)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            Divider()
+
+            Group {
+                switch tab {
+                case 1:  sessionsTab
+                case 2:  usageTab
+                case 3:  updatesTab
+                default: callbacksTab
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: 470, height: 360)
+        .frame(width: 480, height: 430)
         .onAppear { settings.reload() }
     }
 
@@ -137,14 +158,13 @@ struct PreferencesView: View {
                 Text("Placeholders: {state} {color} {count} {name}")
                     .font(.caption2).foregroundStyle(.tertiary)
 
-                Spacer(minLength: 4)
-
                 HStack {
                     Button("Reveal config") { settings.reveal(CallbackEngine.configURL) }
                     Button("Reveal log") { settings.reveal(CallbackEngine.logURL) }
                     Spacer()
                 }
                 .controlSize(.small)
+                .padding(.top, 2)
             }
         }
     }
@@ -224,9 +244,9 @@ struct PreferencesView: View {
                 }
                 .controlSize(.small)
 
-                Spacer(minLength: 4)
                 Text("CC Status Light v\(UpdateChecker.currentVersion)")
                     .font(.caption2).foregroundStyle(.tertiary)
+                    .padding(.top, 6)
             }
         }
     }
