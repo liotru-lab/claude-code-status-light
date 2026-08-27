@@ -175,14 +175,19 @@ struct ContentView: View {
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "gauge.with.dots.needle.50percent")
-                        if let p = usage.sessionPercent {
+                        if usage.needsReauth {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                        } else if let p = usage.sessionPercent {
                             Text("\(p)%").font(.caption2.weight(.medium))
                         }
                     }
-                    .foregroundStyle(usage.worstSeverity.tint)
-                    // Dim when the number may be behind (token expired, only
-                    // background ticks since — a look refreshes it).
-                    .opacity(usage.isStale ? 0.45 : 1)
+                    // Orange when the login needs reconnecting; otherwise tint by
+                    // how close to a limit the numbers are.
+                    .foregroundStyle(usage.needsReauth ? .orange : usage.worstSeverity.tint)
+                    // Dim whenever the number isn't current — token expired
+                    // (background-only since) or the login is dead. A look refreshes.
+                    .opacity((usage.isStale || usage.needsReauth) ? 0.45 : 1)
                 }
                 .buttonStyle(.borderless)
                 .help("Plan usage (session & weekly limits)")
