@@ -190,7 +190,12 @@ struct ContentView: View {
             // off lives in Settings.
             Button {
                 if usage.enabled {
-                    if !showUsage { usage.refresh(); environment.refresh() }
+                    // Opening just shows the last numbers the background timer
+                    // already fetched — no network call, so checking usage often
+                    // never adds to the rate-limit load. The ↻ in the panel is the
+                    // only on-demand refresh. (environment.refresh is a local read
+                    // for the plan label — no network.)
+                    if !showUsage { environment.refresh() }
                     showUsage.toggle()
                 } else {
                     showUsageIntro.toggle()

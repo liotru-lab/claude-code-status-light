@@ -96,7 +96,7 @@ final class UsageStore: ObservableObject {
         // you actually look at usage (open the popover).
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)   // default false
         let saved = UserDefaults.standard.integer(forKey: Self.intervalKey)
-        intervalMinutes = Self.intervalChoices.contains(saved) ? saved : 2   // default 2
+        intervalMinutes = Self.intervalChoices.contains(saved) ? saved : 4   // default 4
         if enabled { scheduleTimer() }
     }
 
