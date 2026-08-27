@@ -117,6 +117,10 @@ final class UsageStore: ObservableObject {
         snapshot.limits.first(where: { $0.group == "session" })?.percent
     }
 
+    /// Usage can't refresh until you act — login expired, or you denied Keychain
+    /// access. Drives the orange alert (distinct from a quiet activity-pause).
+    var needsAttention: Bool { needsReauth || keychainDenied }
+
     init() {
         // didSet does not fire during init, so enabling at launch does not read
         // the Keychain here. The timer runs, but its background ticks only make a
