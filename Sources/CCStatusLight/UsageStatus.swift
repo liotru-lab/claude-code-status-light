@@ -154,6 +154,9 @@ final class UsageStore: ObservableObject {
     /// when it has expired without hitting the Keychain again.
     private var cachedToken: String?
     private var tokenExpiresAt: Date?
+    /// You denied the Keychain prompt. Stop reading it in the background (no more
+    /// prompts every interval); only an explicit ↻ / re-enable retries.
+    private var keychainDenied = false
 
     private var tokenUsable: Bool {
         guard cachedToken != nil else { return false }
@@ -183,12 +186,17 @@ final class UsageStore: ObservableObject {
         if tokenUsable, let token = cachedToken {
             isLoading = true; lastError = nil
             fetch(bearer: token, fresh: false)          // silent, always OK
-        } else if interactive || recentlyActive {
+        } else if interactive {
+            // You clicked ↻ / enabled: read the Keychain, and drop a prior deny.
+            isLoading = true; lastError = nil; keychainDenied = false
+            readTokenThenFetch()
+        } else if recentlyActive && !keychainDenied {
             isLoading = true; lastError = nil
             readTokenThenFetch()                        // may prompt — but in-context
         } else {
-            // Token expired and you've stepped away: don't read the Keychain.
-            if !snapshot.limits.isEmpty { isPaused = true }
+            // Token expired and either you've stepped away or you denied the
+            // prompt: don't read the Keychain (no repeat prompts). Stay paused.
+            isPaused = true
         }
     }
 
@@ -213,8 +221,9 @@ final class UsageStore: ObservableObject {
             lastError = "Not logged into Claude Code. Sign in there, then Reconnect."
         case .denied:
             isLoading = false
-            needsReauth = true
-            lastError = "Keychain access denied. Allow it for CC Status Light."
+            keychainDenied = true
+            isPaused = true
+            lastError = "Keychain access denied — paused. Use ↻ to retry."
         case .malformed:
             isLoading = false
             lastError = "Couldn't read the Claude Code login."
@@ -277,6 +286,7 @@ final class UsageStore: ObservableObject {
                     self.lastError = nil
                     self.needsReauth = false
                     self.isPaused = false
+                    self.keychainDenied = false
                     self.backoffUntil = nil
                 } else {
                     self.lastError = failure

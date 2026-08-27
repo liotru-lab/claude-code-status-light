@@ -349,7 +349,9 @@ struct UsageView: View {
                     }
                 }
                 HStack(spacing: 4) {
-                    if usage.isPaused {
+                    // Activity-pause note only; a deny/error is already explained
+                    // by the notice above.
+                    if usage.isPaused, usage.lastError == nil {
                         Image(systemName: "pause.circle").font(.caption2)
                         Text("Paused — no recent activity.").font(.caption2)
                     }
