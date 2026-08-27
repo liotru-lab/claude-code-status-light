@@ -22,6 +22,7 @@ struct ContentView: View {
     @EnvironmentObject var updater: SelfUpdater
     @EnvironmentObject var usage: UsageStore
     @State private var showUsage = false
+    @State private var showUsageIntro = false
     @State private var showLegend = false
     @State private var showEnvironment = false
     @State private var expanded: Set<String> = []
@@ -180,13 +181,21 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
-            if usage.enabled {
-                Button {
-                    if !showUsage { usage.refresh() }
+            // The gauge is always present. When usage is on it opens the panel;
+            // when off it's a quiet on-switch — a click explains what enabling
+            // does (keychain + network) before anything happens. Turning it back
+            // off lives in Settings.
+            Button {
+                if usage.enabled {
+                    if !showUsage { usage.refresh(); environment.refresh() }
                     showUsage.toggle()
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "gauge.with.dots.needle.50percent")
+                } else {
+                    showUsageIntro.toggle()
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                    if usage.enabled {
                         if usage.needsReauth {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.caption2)
@@ -194,15 +203,21 @@ struct ContentView: View {
                             Text("\(p)%").font(.caption2.weight(.medium))
                         }
                     }
-                    // Legible at rest (primary), escalating to orange as a limit
-                    // gets close and red when it's nearly hit; orange for a login
-                    // that needs reconnecting.
-                    .foregroundStyle(usageTint)
                 }
-                .buttonStyle(.borderless)
-                .help("Plan usage (session & weekly limits)")
-                .popover(isPresented: $showUsage, arrowEdge: .bottom) {
-                    UsageView(usage: usage)
+                // On: legible at rest (primary), orange/red as a limit nears.
+                // Off: muted, inviting a click without implying live data.
+                .foregroundStyle(usage.enabled ? usageTint : Color.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(usage.enabled ? "Plan usage (session & weekly limits)" : "Show plan usage")
+            .popover(isPresented: $showUsage, arrowEdge: .bottom) {
+                UsageView(usage: usage, plan: environment.status.planLabel)
+            }
+            .popover(isPresented: $showUsageIntro, arrowEdge: .bottom) {
+                UsageIntroView {
+                    usage.enabled = true
+                    showUsageIntro = false
+                    showUsage = true
                 }
             }
             Button {
@@ -254,11 +269,19 @@ extension UsageLimit.Severity {
 /// Plan-usage popover: the session and weekly bars from Claude's Settings ▸ Usage.
 struct UsageView: View {
     @ObservedObject var usage: UsageStore
+    /// The account's plan (Pro / Max 5× / Team …), read locally; nil if unknown.
+    var plan: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 8) {
                 Text("Plan usage").font(.headline)
+                if let plan {
+                    Text(plan)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15), in: Capsule())
+                }
                 Spacer()
                 Button { usage.refresh() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
@@ -319,6 +342,50 @@ struct UsageView: View {
         return sameDay
             ? .dateTime.hour().minute()
             : .dateTime.weekday(.abbreviated).hour().minute()
+    }
+}
+
+/// Shown when the gauge is tapped while usage is off — an honest heads-up about
+/// what enabling does (keychain read + one network host) before it happens.
+struct UsageIntroView: View {
+    let onEnable: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Plan usage").font(.headline)
+            Text("Show your plan's session and weekly limits in the footer — the same numbers as Claude's Settings ▸ Usage.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Label {
+                    Text("Reads your Claude Code login from the **keychain** — macOS asks the first time (choose *Always Allow*).")
+                } icon: { Image(systemName: "key.fill") }
+                Label {
+                    Text("Fetches usage from **api.anthropic.com** — read-only; nothing about you is sent.")
+                } icon: { Image(systemName: "network") }
+                Label {
+                    Text("Requires being signed in to Claude Code.")
+                } icon: { Image(systemName: "person.crop.circle") }
+            }
+            .font(.caption)
+            .labelStyle(.titleAndIcon)
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Not now") { dismiss() }
+                Button("Enable") { onEnable() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 2)
+
+            Text("You can turn this off again in Settings.")
+                .font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 320)
     }
 }
 
