@@ -66,7 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // session state. Emits on the main actor (SessionStore is @MainActor).
         store.$sessions
             .sink { [weak self] sessions in
-                MainActor.assumeIsolated { self?.callbackEngine.update(sessions) }
+                MainActor.assumeIsolated {
+                    self?.callbackEngine.update(sessions)
+                    // Note engagement for the usage panel: a non-idle live session
+                    // means you're working, so a background Keychain read is
+                    // in-context rather than out of the blue.
+                    let active = sessions.contains { $0.live && $0.state != .idle && $0.state != .ended }
+                    self?.usageStore.noteSessionsActive(active)
+                }
             }
             .store(in: &cancellables)
     }

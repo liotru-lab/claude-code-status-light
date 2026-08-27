@@ -44,14 +44,20 @@ final class UsageStore: ObservableObject {
     /// of anything popping up on its own.
     @Published private(set) var needsReauth = false
 
+    /// The cached token has expired and no session has been active recently, so we
+    /// deliberately did *not* read the Keychain in the background (that would
+    /// prompt out of the blue). The numbers are frozen at the last fetch; a look
+    /// with ↻, or a session becoming active, refreshes them.
+    @Published private(set) var isPaused = false
+
     @Published var enabled: Bool {
         didSet {
             UserDefaults.standard.set(enabled, forKey: Self.enabledKey)
-            if enabled { scheduleTimer(); refresh() }
+            if enabled { scheduleTimer(); refresh(interactive: true) }
             else {
                 timer?.invalidate(); timer = nil
                 snapshot = UsageSnapshot(); lastError = nil
-                needsReauth = false; backoffUntil = nil
+                needsReauth = false; isPaused = false; backoffUntil = nil
                 cachedToken = nil; tokenExpiresAt = nil
             }
         }
@@ -70,12 +76,34 @@ final class UsageStore: ObservableObject {
     static let enabledKey = "showPlanUsage"
     static let intervalKey = "planUsageIntervalMinutes"
     static let intervalChoices = [2, 4, 8, 15]
+    /// How long after a session was last active we still treat you as "engaged" —
+    /// the window in which a background refresh may read the Keychain (and so may
+    /// prompt). Outside it, background refreshes never touch the Keychain.
+    static let activityWindowKey = "usageActivityWindowMinutes"
+    static let activityWindowChoices = [15, 30, 45, 60]
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private static let keychainService = "Claude Code-credentials"
 
     private var timer: Timer?
     /// Set from a 429's Retry-After — don't call the endpoint again until then.
     private var backoffUntil: Date?
+    /// Last time any session was non-idle — fed from the session list. Used to
+    /// decide whether a background Keychain read is in-context (you're working) or
+    /// out of the blue (you've stepped away).
+    private var lastSessionActiveAt: Date?
+
+    /// Was a session active within the user's activity window?
+    private var recentlyActive: Bool {
+        guard let t = lastSessionActiveAt else { return false }
+        let mins = UserDefaults.standard.object(forKey: Self.activityWindowKey) as? Int
+        let window = (mins.map { Self.activityWindowChoices.contains($0) } ?? false) ? mins! : 15
+        return Date().timeIntervalSince(t) < TimeInterval(window) * 60
+    }
+
+    /// Called from the app whenever the session list changes.
+    func noteSessionsActive(_ active: Bool) {
+        if active { lastSessionActiveAt = Date() }
+    }
 
     /// Highest severity across the bars — drives an at-a-glance footer tint.
     var worstSeverity: UsageLimit.Severity {
@@ -105,7 +133,7 @@ final class UsageStore: ObservableObject {
     private func scheduleTimer() {
         timer?.invalidate()
         let t = Timer(timeInterval: TimeInterval(intervalMinutes * 60), repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in self?.refresh(interactive: false) }
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
@@ -118,7 +146,7 @@ final class UsageStore: ObservableObject {
     func reconnect() {
         cachedToken = nil; tokenExpiresAt = nil
         needsReauth = false; lastError = nil
-        refresh()
+        refresh(interactive: true)
     }
 
     /// In-memory token + its expiry, learned from the Keychain blob. Held so
@@ -133,12 +161,15 @@ final class UsageStore: ObservableObject {
         return true   // no expiry info — assume usable, let a 401 correct it
     }
 
-    /// Refresh the numbers. Reuses the in-memory token when it's still valid (a
-    /// network call, no Keychain); reads the Keychain for a fresh one when it has
-    /// expired. With "Always Allow" granted those reads are silent, so the
-    /// background timer keeps the footer current with no clicks; without it, macOS
-    /// prompts — the one place it can. Same path for a look or a background tick.
-    func refresh() {
+    /// Refresh the numbers.
+    ///
+    /// A valid cached token means a **silent network call** — no Keychain, no
+    /// prompt — so that always runs (usage is account-wide and moves even when
+    /// Code is idle). Only when the token has expired do we need the Keychain, and
+    /// that read can prompt: we do it when `interactive` (you clicked ↻ / enabled)
+    /// or when a session was active recently (in-context). Otherwise we **skip the
+    /// Keychain** and flag the numbers paused — never an out-of-the-blue prompt.
+    func refresh(interactive: Bool) {
         guard enabled, !isLoading else { return }
         // Honour a 429 back-off — don't hammer the endpoint while it's asked us to
         // wait. Applies to the timer and the manual "Try again" alike.
@@ -148,12 +179,16 @@ final class UsageStore: ObservableObject {
             return
         }
         backoffUntil = nil
-        isLoading = true
-        lastError = nil
+
         if tokenUsable, let token = cachedToken {
-            fetch(bearer: token, fresh: false)
+            isLoading = true; lastError = nil
+            fetch(bearer: token, fresh: false)          // silent, always OK
+        } else if interactive || recentlyActive {
+            isLoading = true; lastError = nil
+            readTokenThenFetch()                        // may prompt — but in-context
         } else {
-            readTokenThenFetch()
+            // Token expired and you've stepped away: don't read the Keychain.
+            if !snapshot.limits.isEmpty { isPaused = true }
         }
     }
 
@@ -241,6 +276,7 @@ final class UsageStore: ObservableObject {
                     self.snapshot = UsageSnapshot(limits: limits, fetchedAt: Date())
                     self.lastError = nil
                     self.needsReauth = false
+                    self.isPaused = false
                     self.backoffUntil = nil
                 } else {
                     self.lastError = failure

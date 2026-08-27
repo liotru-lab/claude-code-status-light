@@ -215,6 +215,9 @@ struct ContentView: View {
                 // On: legible at rest (primary), orange/red as a limit nears.
                 // Off: muted, inviting a click without implying live data.
                 .foregroundStyle(usage.enabled ? usageTint : Color.secondary)
+                // Dim when the number isn't being refreshed (paused: token
+                // expired and you've stepped away).
+                .opacity(usage.isPaused ? 0.5 : 1)
             }
             .buttonStyle(.borderless)
             .help(usage.enabled ? "Plan usage (session & weekly limits)" : "Show plan usage")
@@ -291,7 +294,7 @@ struct UsageView: View {
                         .background(Color.secondary.opacity(0.15), in: Capsule())
                 }
                 Spacer()
-                Button { usage.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                Button { usage.refresh(interactive: true) } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
                     .disabled(usage.isLoading)
                     .help("Refresh")
@@ -345,10 +348,16 @@ struct UsageView: View {
                         }
                     }
                 }
-                if let at = usage.snapshot.fetchedAt {
-                    Text("Updated \(at, style: .relative) ago")
-                        .font(.caption2).foregroundStyle(.tertiary)
+                HStack(spacing: 4) {
+                    if usage.isPaused {
+                        Image(systemName: "pause.circle").font(.caption2)
+                        Text("Paused — no recent activity.").font(.caption2)
+                    }
+                    if let at = usage.snapshot.fetchedAt {
+                        Text("Updated \(at, style: .relative) ago").font(.caption2)
+                    }
                 }
+                .foregroundStyle(.tertiary)
             } else if usage.lastError == nil {
                 Text(usage.isLoading ? "Loading…" : "No usage data.")
                     .font(.caption).foregroundStyle(.secondary)
