@@ -51,21 +51,31 @@ final class UsageStore: ObservableObject {
             else {
                 timer?.invalidate(); timer = nil
                 snapshot = UsageSnapshot(); lastError = nil
-                needsReauth = false
+                needsReauth = false; backoffUntil = nil
                 cachedToken = nil; tokenExpiresAt = nil
             }
         }
     }
 
+    /// How often the footer numbers refresh, in minutes. A *network* refresh using
+    /// the in-memory token — it doesn't touch the Keychain, so cadence never means
+    /// prompts. User-chosen from `intervalChoices`.
+    @Published var intervalMinutes: Int {
+        didSet {
+            UserDefaults.standard.set(intervalMinutes, forKey: Self.intervalKey)
+            if enabled { scheduleTimer() }
+        }
+    }
+
     static let enabledKey = "showPlanUsage"
+    static let intervalKey = "planUsageIntervalMinutes"
+    static let intervalChoices = [2, 4, 8, 15]
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private static let keychainService = "Claude Code-credentials"
-    /// Background cadence for keeping the footer numbers current. This is a
-    /// *network* refresh using the in-memory token — it never touches the
-    /// Keychain, so it never prompts.
-    private static let refreshInterval: TimeInterval = 90
 
     private var timer: Timer?
+    /// Set from a 429's Retry-After — don't call the endpoint again until then.
+    private var backoffUntil: Date?
 
     /// Highest severity across the bars — drives an at-a-glance footer tint.
     var worstSeverity: UsageLimit.Severity {
@@ -85,6 +95,8 @@ final class UsageStore: ObservableObject {
         // network call once a token exists — the first Keychain read waits until
         // you actually look at usage (open the popover).
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)   // default false
+        let saved = UserDefaults.standard.integer(forKey: Self.intervalKey)
+        intervalMinutes = Self.intervalChoices.contains(saved) ? saved : 2   // default 2
         if enabled { scheduleTimer() }
     }
 
@@ -92,7 +104,7 @@ final class UsageStore: ObservableObject {
 
     private func scheduleTimer() {
         timer?.invalidate()
-        let t = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: TimeInterval(intervalMinutes * 60), repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
         RunLoop.main.add(t, forMode: .common)
@@ -125,6 +137,14 @@ final class UsageStore: ObservableObject {
     /// prompts — the one place it can. Same path for a look or a background tick.
     func refresh() {
         guard enabled, !isLoading else { return }
+        // Honour a 429 back-off — don't hammer the endpoint while it's asked us to
+        // wait. Applies to the timer and the manual "Try again" alike.
+        if let until = backoffUntil, Date() < until {
+            let secs = max(1, Int(until.timeIntervalSinceNow.rounded(.up)))
+            lastError = "Usage checks are rate-limited — try again in \(secs)s."
+            return
+        }
+        backoffUntil = nil
         isLoading = true
         lastError = nil
         if tokenUsable, let token = cachedToken {
@@ -178,11 +198,17 @@ final class UsageStore: ObservableObject {
             var limits: [UsageLimit]?
             var failure: String?
             var unauthorized = false
+            var retryAfter: TimeInterval?
             if let error {
                 failure = error.localizedDescription
             } else if let http = response as? HTTPURLResponse, http.statusCode == 401 {
                 unauthorized = true
                 failure = "Login expired — open Claude Code once to refresh it."
+            } else if let http = response as? HTTPURLResponse, http.statusCode == 429 {
+                // Rate-limited. Respect Retry-After if present, else a sane default.
+                retryAfter = (http.value(forHTTPHeaderField: "Retry-After"))
+                    .flatMap(Self.parseRetryAfter) ?? 60
+                failure = "Usage checks are rate-limited — try again shortly."
             } else if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                 failure = "Anthropic returned HTTP \(http.statusCode)."
             } else if let data {
@@ -205,15 +231,30 @@ final class UsageStore: ObservableObject {
                     return
                 }
                 self.isLoading = false
+                if let retryAfter {
+                    self.backoffUntil = Date().addingTimeInterval(retryAfter)
+                }
                 if let limits {
                     self.snapshot = UsageSnapshot(limits: limits, fetchedAt: Date())
                     self.lastError = nil
                     self.needsReauth = false
+                    self.backoffUntil = nil
                 } else {
                     self.lastError = failure
                 }
             }
         }.resume()
+    }
+
+    /// Retry-After is either seconds (an integer) or an HTTP date.
+    private static func parseRetryAfter(_ s: String) -> TimeInterval? {
+        if let secs = TimeInterval(s.trimmingCharacters(in: .whitespaces)) { return max(1, secs) }
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone(identifier: "GMT")
+        fmt.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        if let d = fmt.date(from: s) { return max(1, d.timeIntervalSinceNow) }
+        return nil
     }
 
     // MARK: - Parsing

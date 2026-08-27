@@ -116,9 +116,20 @@ struct PreferencesView: View {
                 Text("Shows your plan's session and weekly usage bars in the footer — the same numbers as Claude's Settings ▸ Usage. It reads your Claude Code login from the keychain; macOS asks the first time, and choosing “Always Allow” keeps it silent afterwards. The token is read-only and talks only to api.anthropic.com; off by default.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if usage.enabled, let err = usage.lastError {
-                    Text(err).font(.caption).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+                if usage.enabled {
+                    Picker("Refresh every", selection: $usage.intervalMinutes) {
+                        ForEach(UsageStore.intervalChoices, id: \.self) { m in
+                            Text("\(m) min").tag(m)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .font(.caption)
+                    .padding(.top, 2)
+                    if let err = usage.lastError {
+                        Text(err).font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 
