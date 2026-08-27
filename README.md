@@ -171,6 +171,7 @@ otherwise exposes. A compact "21%" sits in the footer; click it for the full
 breakdown — current session, weekly all-models, and per-model — each with its
 reset time and labelled with your plan.
 
+> [!IMPORTANT]
 > **Early support — plan limits only.** This is an initial version. It reflects
 > your **plan's usage thresholds** (the session and weekly limit bars) and
 > nothing more. It does **not** yet handle **token-based usage** (pay-as-you-go /
