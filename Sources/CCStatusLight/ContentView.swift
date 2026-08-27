@@ -170,7 +170,7 @@ struct ContentView: View {
                 .fixedSize()
             if usage.enabled {
                 Button {
-                    if !showUsage { usage.refresh() }
+                    if !showUsage { usage.refresh(interactive: true) }
                     showUsage.toggle()
                 } label: {
                     HStack(spacing: 3) {
@@ -180,6 +180,9 @@ struct ContentView: View {
                         }
                     }
                     .foregroundStyle(usage.worstSeverity.tint)
+                    // Dim when the number may be behind (token expired, only
+                    // background ticks since — a look refreshes it).
+                    .opacity(usage.isStale ? 0.45 : 1)
                 }
                 .buttonStyle(.borderless)
                 .help("Plan usage (session & weekly limits)")
@@ -242,7 +245,7 @@ struct UsageView: View {
             HStack {
                 Text("Plan usage").font(.headline)
                 Spacer()
-                Button { usage.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                Button { usage.refresh(interactive: true) } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
                     .disabled(usage.isLoading)
                     .help("Refresh")

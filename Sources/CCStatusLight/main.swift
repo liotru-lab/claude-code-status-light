@@ -94,7 +94,7 @@ if arguments.contains("--check-update") {
 if arguments.contains("--usage") {
     UserDefaults.standard.set(true, forKey: UsageStore.enabledKey)
     let store = MainActor.assumeIsolated { UsageStore() }
-    MainActor.assumeIsolated { store.refresh() }
+    MainActor.assumeIsolated { store.refresh(interactive: true) }
     var done = false
     let deadline = Date().addingTimeInterval(20)
     while !done && Date() < deadline {

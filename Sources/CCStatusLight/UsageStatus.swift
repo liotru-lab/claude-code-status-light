@@ -44,19 +44,35 @@ final class UsageStore: ObservableObject {
     /// of anything popping up on its own.
     @Published private(set) var needsReauth = false
 
+    /// The cached token has expired and only a background tick has run since, so
+    /// the numbers may be behind. Refreshing needs a Keychain read, which we defer
+    /// to your next *look* rather than prompting in the background.
+    @Published private(set) var isStale = false
+
     @Published var enabled: Bool {
         didSet {
             UserDefaults.standard.set(enabled, forKey: Self.enabledKey)
             // Turning it on is a deliberate action, so a one-off Keychain read
             // here is expected. Turning it off forgets everything held in memory.
-            if enabled { refresh() }
-            else { snapshot = UsageSnapshot(); lastError = nil; needsReauth = false; cachedToken = nil }
+            if enabled { scheduleTimer(); refresh(interactive: true) }
+            else {
+                timer?.invalidate(); timer = nil
+                snapshot = UsageSnapshot(); lastError = nil
+                needsReauth = false; isStale = false
+                cachedToken = nil; tokenExpiresAt = nil
+            }
         }
     }
 
     static let enabledKey = "showPlanUsage"
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private static let keychainService = "Claude Code-credentials"
+    /// Background cadence for keeping the footer numbers current. This is a
+    /// *network* refresh using the in-memory token — it never touches the
+    /// Keychain, so it never prompts.
+    private static let refreshInterval: TimeInterval = 90
+
+    private var timer: Timer?
 
     /// Highest severity across the bars — drives an at-a-glance footer tint.
     var worstSeverity: UsageLimit.Severity {
@@ -71,37 +87,67 @@ final class UsageStore: ObservableObject {
     }
 
     init() {
-        // didSet does not fire during init, so this never reads the Keychain on
-        // launch — reads happen only when you look at usage (open the popover) or
-        // toggle the feature on. No background timer means no surprise prompt
-        // while you're working on something else.
+        // didSet does not fire during init, so enabling at launch does not read
+        // the Keychain here. The timer runs, but its background ticks only make a
+        // network call once a token exists — the first Keychain read waits until
+        // you actually look at usage (open the popover).
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)   // default false
+        if enabled { scheduleTimer() }
+    }
+
+    deinit { timer?.invalidate() }
+
+    private func scheduleTimer() {
+        timer?.invalidate()
+        let t = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh(interactive: false) }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
     /// User asked to re-read the login (e.g. after signing back into Claude Code).
-    /// Drops the cached token so the next fetch goes to the Keychain.
     func reconnect() {
-        cachedToken = nil
-        needsReauth = false
-        lastError = nil
-        refresh()
+        cachedToken = nil; tokenExpiresAt = nil
+        needsReauth = false; lastError = nil
+        refresh(interactive: true)
     }
 
-    /// Token held in memory after the first successful Keychain read, so routine
-    /// refreshes don't re-hit the Keychain — which, if the user granted only
-    /// "Allow" (not "Always Allow"), would re-prompt on every 5-minute tick. We
-    /// only go back to the Keychain on first load or after a 401 (rotated token).
+    /// In-memory token + its expiry, learned from the Keychain blob. Held so
+    /// background refreshes reuse it (a network call, no prompt) and we can tell
+    /// when it has expired without hitting the Keychain again.
     private var cachedToken: String?
+    private var tokenExpiresAt: Date?
 
-    func refresh() {
+    private var tokenUsable: Bool {
+        guard cachedToken != nil else { return false }
+        if let exp = tokenExpiresAt { return Date() < exp }
+        return true   // no expiry info — assume usable, let a 401 correct it
+    }
+
+    /// How a given fetch got its token — decides what a 401 means.
+    private enum Source {
+        case cachedInteractive   // cached token, user is looking → 401 re-reads Keychain
+        case cachedBackground    // cached token, timer tick    → 401 just marks stale
+        case freshFromKeychain   // just read the Keychain       → 401 is a dead login
+    }
+
+    /// `interactive` = the user is looking (popover open / toggle / Reconnect /
+    /// manual). Only an interactive refresh may read the Keychain; a background
+    /// tick never does, so it can never surface a prompt.
+    func refresh(interactive: Bool) {
         guard enabled, !isLoading else { return }
-        isLoading = true
-        lastError = nil
 
-        if let token = cachedToken {
-            fetch(bearer: token, allowKeychainRetry: true)
-        } else {
+        if tokenUsable, let token = cachedToken {
+            isLoading = true; lastError = nil
+            fetch(bearer: token, source: interactive ? .cachedInteractive : .cachedBackground)
+        } else if interactive {
+            isLoading = true; lastError = nil; isStale = false
             readTokenThenFetch()
+        } else {
+            // Background, no usable token: don't touch the Keychain (would prompt).
+            // Leave the last numbers up, just flag them as possibly behind.
+            if !snapshot.limits.isEmpty { isStale = true }
         }
     }
 
@@ -117,9 +163,9 @@ final class UsageStore: ObservableObject {
 
     private func useToken(_ result: TokenResult) {
         switch result {
-        case .token(let t):
-            cachedToken = t
-            fetch(bearer: t, allowKeychainRetry: false)
+        case .token(let t, let expiresAt):
+            cachedToken = t; tokenExpiresAt = expiresAt
+            fetch(bearer: t, source: .freshFromKeychain)
         case .notFound:
             isLoading = false
             needsReauth = true
@@ -133,10 +179,7 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    /// `allowKeychainRetry` is true only when `bearer` came from the in-memory
-    /// cache: a 401 then means the cached token rotated, so we drop it and re-read
-    /// the Keychain once. A 401 on a freshly-read token is a real auth failure.
-    private func fetch(bearer: String, allowKeychainRetry: Bool) {
+    private func fetch(bearer: String, source: Source) {
         var request = URLRequest(url: Self.endpoint)
         request.timeoutInterval = 12
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
@@ -161,28 +204,34 @@ final class UsageStore: ObservableObject {
             }
             Task { @MainActor in
                 guard let self else { return }
-                // A 401 on a cached token means it rotated — drop it and re-read
-                // the Keychain once. `allowKeychainRetry` guards against a loop.
-                if unauthorized, allowKeychainRetry {
-                    self.cachedToken = nil
-                    self.readTokenThenFetch()   // keeps isLoading true through the retry
-                    return
+                if unauthorized {
+                    self.cachedToken = nil; self.tokenExpiresAt = nil
+                    switch source {
+                    case .cachedInteractive:
+                        // User is looking; pick up a rotated token from the Keychain.
+                        self.readTokenThenFetch()   // stays loading through the retry
+                        return
+                    case .cachedBackground:
+                        // Never read the Keychain in the background — just flag stale.
+                        self.isLoading = false
+                        if !self.snapshot.limits.isEmpty { self.isStale = true }
+                        return
+                    case .freshFromKeychain:
+                        // A just-read token was still rejected → the login is dead.
+                        self.isLoading = false
+                        self.needsReauth = true
+                        self.lastError = "Claude Code login expired. Sign in there, then Reconnect."
+                        return
+                    }
                 }
                 self.isLoading = false
                 if let limits {
                     self.snapshot = UsageSnapshot(limits: limits, fetchedAt: Date())
                     self.lastError = nil
                     self.needsReauth = false
+                    self.isStale = false
                 } else {
-                    // A 401 that survived the Keychain re-read means the stored
-                    // login itself is stale — sign in to Claude Code, then Reconnect.
-                    if unauthorized {
-                        self.cachedToken = nil
-                        self.needsReauth = true
-                        self.lastError = "Claude Code login expired. Sign in there, then Reconnect."
-                    } else {
-                        self.lastError = failure
-                    }
+                    self.lastError = failure
                 }
             }
         }.resume()
@@ -227,7 +276,7 @@ final class UsageStore: ObservableObject {
 
     // MARK: - Keychain
 
-    enum TokenResult { case token(String), notFound, denied, malformed }
+    enum TokenResult { case token(String, expiresAt: Date?), notFound, denied, malformed }
 
     /// Read Claude Code's stored OAuth access token.
     ///
@@ -260,7 +309,13 @@ final class UsageStore: ObservableObject {
                       let token = oauth["accessToken"] as? String,
                       !token.isEmpty
                 else { return .malformed }
-                return .token(token)
+                // expiresAt is epoch-millis; keep a small safety margin so we
+                // refresh from the Keychain just *before* the token actually dies.
+                var expiry: Date?
+                if let ms = (oauth["expiresAt"] as? NSNumber)?.doubleValue {
+                    expiry = Date(timeIntervalSince1970: ms / 1000).addingTimeInterval(-60)
+                }
+                return .token(token, expiresAt: expiry)
             case errSecItemNotFound:      return .notFound
             case errSecAuthFailed,
                  errSecUserCanceled,
