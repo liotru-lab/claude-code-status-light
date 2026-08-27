@@ -124,6 +124,20 @@ final class SessionScanner {
                 }
             }
 
+            // Auto-clean: an idle session that's been quiet longer than the user's
+            // threshold. Only idle/ready — never something working or waiting on
+            // you — and it reappears if the (still-alive) session does anything
+            // again, since the hook rewrites the marker.
+            if live, state == .idle || state == .ready {
+                let hours = SessionStore.autoCleanHours
+                let lastActivity = parser?.lastLineTime ?? marker.timestamp
+                if hours > 0, let last = lastActivity,
+                   now.timeIntervalSince(last) > TimeInterval(hours) * 3600 {
+                    try? fm.removeItem(at: url)
+                    continue
+                }
+            }
+
             let name = parser?.nameFromTranscript ?? Session.shortId(marker.sessionId)
             let detail = live ? parser?.detail : nil
 
@@ -184,6 +198,24 @@ final class SessionStore: ObservableObject {
         return base
             .appendingPathComponent("CCStatusLight", isDirectory: true)
             .appendingPathComponent("state", isDirectory: true)
+    }
+
+    // Auto-clean an idle session after this many hours of inactivity. 0 = never.
+    // Unset defaults to 24h (a day). The scanner reads this each pass.
+    nonisolated static let autoCleanHoursKey = "staleSessionHours"
+    nonisolated static let autoCleanChoices = [0, 1, 4, 24]   // Never · 1h · 4h · 1 day
+    nonisolated static var autoCleanHours: Int {
+        UserDefaults.standard.object(forKey: autoCleanHoursKey) == nil
+            ? 24 : UserDefaults.standard.integer(forKey: autoCleanHoursKey)
+    }
+
+    /// Hide a session from the list by deleting its marker. Non-destructive: it
+    /// doesn't touch the session or its transcript, and a still-alive session
+    /// reappears the next time it does anything (the hook rewrites the marker).
+    func remove(_ sessionId: String) {
+        let url = Self.stateDirectory.appendingPathComponent("\(sessionId).json")
+        try? FileManager.default.removeItem(at: url)
+        refresh()
     }
 
     private let scanner: SessionScanner

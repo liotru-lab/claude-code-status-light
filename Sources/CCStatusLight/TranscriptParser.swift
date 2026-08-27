@@ -280,14 +280,16 @@ final class TranscriptParser {
                         }
                     }
                 case "text":
-                    if let s = block["text"] as? String, !s.isEmpty { hasText = true }
+                    if let s = block["text"] as? String, !s.isEmpty,
+                       !Self.isLocalCommandEcho(s) { hasText = true }
                 case "image":
                     hasText = true
                 default:
                     break
                 }
             }
-        } else if let s = message["content"] as? String, !s.isEmpty {
+        } else if let s = message["content"] as? String, !s.isEmpty,
+                  !Self.isLocalCommandEcho(s) {
             hasText = true
         }
 
@@ -297,6 +299,21 @@ final class TranscriptParser {
             activeAgents.removeAll(); asyncAgents.removeAll()
             state = .active; activity = "thinking"
         }
+    }
+
+    /// Terminal-only echoes are logged as `user` messages *with* a promptId, but
+    /// they are not prompts to Claude and no assistant turn follows them: the
+    /// `!`-bash feature (`<bash-input>`/`<bash-stdout>`/`<bash-stderr>`), slash
+    /// commands (`<command-name>`…), and local-command notices
+    /// (`<local-command-…>`). Treated as prompts they strand a session in
+    /// "thinking" forever — and they're exactly the kind of thing that ends up as
+    /// the last line before someone steps away from a terminal.
+    private static func isLocalCommandEcho(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markers = ["<bash-input>", "<bash-stdout>", "<bash-stderr>",
+                       "<local-command-", "<command-name>", "<command-message>",
+                       "<command-args>", "<command-contents>"]
+        return markers.contains { t.hasPrefix($0) }
     }
 
     private func processSystem(_ dict: [String: Any]) {

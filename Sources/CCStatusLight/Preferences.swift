@@ -59,6 +59,17 @@ struct PreferencesView: View {
     @ObservedObject var settings: CallbackSettings
     @ObservedObject var updates: UpdateChecker
     @ObservedObject var updater: SelfUpdater
+    @ObservedObject var usage: UsageStore
+    @AppStorage(SessionStore.autoCleanHoursKey) private var staleHours = 24
+
+    private static func staleLabel(_ h: Int) -> String {
+        switch h {
+        case 0:  return "Never"
+        case 1:  return "1 hour"
+        case 24: return "1 day"
+        default: return "\(h) hours"
+        }
+    }
 
     private static let rows: [(state: String, label: String, color: Color)] = [
         ("notification", "Attention", .red),
@@ -106,6 +117,49 @@ struct PreferencesView: View {
 
             Text("Placeholders: {state} {color} {count} {name}")
                 .font(.caption2).foregroundStyle(.tertiary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Remove inactive sessions after").font(.headline)
+                    Spacer()
+                    Picker("", selection: $staleHours) {
+                        ForEach(SessionStore.autoCleanChoices, id: \.self) { h in
+                            Text(Self.staleLabel(h)).tag(h)
+                        }
+                    }
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                }
+                Text("Idle sessions quiet for this long drop off the list. Working sessions are never removed, and a hidden one reappears if it becomes active again. Right-click any row to remove it now.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Show plan usage", isOn: $usage.enabled)
+                    .font(.headline)
+                Text("Shows your plan's session and weekly usage bars in the footer — the same numbers as Claude's Settings ▸ Usage. It reads your Claude Code login from the keychain; macOS asks the first time, and choosing “Always Allow” keeps it silent afterwards. The token is read-only and talks only to api.anthropic.com; off by default.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if usage.enabled {
+                    Picker("Refresh every", selection: $usage.intervalMinutes) {
+                        ForEach(UsageStore.intervalChoices, id: \.self) { m in
+                            Text("\(m) min").tag(m)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .font(.caption)
+                    .padding(.top, 2)
+                    if let err = usage.lastError {
+                        Text(err).font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
 
             Divider()
 

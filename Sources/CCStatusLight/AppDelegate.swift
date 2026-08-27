@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let callbackSettings = CallbackSettings()
     private let updateChecker = UpdateChecker()
     private let selfUpdater = SelfUpdater()
+    private let usageStore = UsageStore()
     private var cancellables = Set<AnyCancellable>()
     private var window: NSWindow?
     private var preferencesWindow: NSWindow?
@@ -94,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .environmentObject(windowState)
             .environmentObject(updateChecker)
             .environmentObject(selfUpdater)
+            .environmentObject(usageStore)
 
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
@@ -118,7 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if preferencesWindow == nil {
             let hosting = NSHostingController(rootView: PreferencesView(settings: callbackSettings,
                                                                         updates: updateChecker,
-                                                                        updater: selfUpdater))
+                                                                        updater: selfUpdater,
+                                                                        usage: usageStore))
             let w = NSWindow(contentViewController: hosting)
             w.title = "Settings"
             w.styleMask = [.titled, .closable]
