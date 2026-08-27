@@ -304,6 +304,9 @@ struct UsageView: View {
                     Button(usage.needsReauth ? "Reconnect" : "Try again") { usage.reconnect() }
                         .controlSize(.small)
                         .disabled(usage.isLoading)
+                    Button { usage.dismissError() } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless)
+                        .help("Dismiss")
                 }
                 .padding(8)
                 .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))

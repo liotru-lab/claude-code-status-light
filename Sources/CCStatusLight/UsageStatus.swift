@@ -111,6 +111,9 @@ final class UsageStore: ObservableObject {
         timer = t
     }
 
+    /// Hide the current error notice. It returns if the next fetch fails again.
+    func dismissError() { lastError = nil }
+
     /// User asked to re-read the login (e.g. after signing back into Claude Code).
     func reconnect() {
         cachedToken = nil; tokenExpiresAt = nil
