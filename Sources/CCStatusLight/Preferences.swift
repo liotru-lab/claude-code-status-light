@@ -61,6 +61,7 @@ struct PreferencesView: View {
     @ObservedObject var updater: SelfUpdater
     @ObservedObject var usage: UsageStore
     @AppStorage(SessionStore.autoCleanHoursKey) private var staleHours = 24
+    @AppStorage(UsageStore.activityWindowKey) private var activeWindow = 15
 
     private static func staleLabel(_ h: Int) -> String {
         switch h {
@@ -198,12 +199,30 @@ struct PreferencesView: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if usage.enabled {
-                    Picker("Refresh every", selection: $usage.intervalMinutes) {
-                        ForEach(UsageStore.intervalChoices, id: \.self) { m in
-                            Text("\(m) min").tag(m)
+                    HStack(spacing: 6) {
+                        Text("Refresh every").font(.caption)
+                        Picker("", selection: $usage.intervalMinutes) {
+                            ForEach(UsageStore.intervalChoices, id: \.self) { m in
+                                Text("\(m) min").tag(m)
+                            }
                         }
+                        .labelsHidden().pickerStyle(.menu).fixedSize()
                     }
-                    .pickerStyle(.menu).fixedSize().font(.caption)
+                    .padding(.top, 2)
+
+                    HStack(spacing: 6) {
+                        Text("Keep live after activity for").font(.caption)
+                        Picker("", selection: $activeWindow) {
+                            ForEach(UsageStore.activityWindowChoices, id: \.self) { m in
+                                Text("\(m) min").tag(m)
+                            }
+                        }
+                        .labelsHidden().pickerStyle(.menu).fixedSize()
+                    }
+                    Text("While a session's been active in this window, the numbers keep refreshing — re-reading your login if it expired, so macOS may ask then. Once your sessions are quiet, refreshing pauses (no out-of-the-blue prompts) until a session is active again or you hit ↻.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     if let err = usage.lastError {
                         Text(err).font(.caption).foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)

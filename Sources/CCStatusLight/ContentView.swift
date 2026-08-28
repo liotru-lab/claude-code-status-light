@@ -123,7 +123,7 @@ struct ContentView: View {
     /// muted secondary), so usage is legible at a glance; colour is reserved for
     /// something that actually wants attention.
     private var usageTint: Color {
-        if usage.needsReauth { return .orange }
+        if usage.needsAttention { return .orange }
         switch usage.worstSeverity {
         case .warning:  return .orange
         case .critical: return .red
@@ -204,7 +204,7 @@ struct ContentView: View {
                 HStack(spacing: 3) {
                     Image(systemName: "gauge.with.dots.needle.50percent")
                     if usage.enabled {
-                        if usage.needsReauth {
+                        if usage.needsAttention {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.caption2)
                         } else if let p = usage.sessionPercent {
@@ -212,9 +212,12 @@ struct ContentView: View {
                         }
                     }
                 }
-                // On: legible at rest (primary), orange/red as a limit nears.
+                // On: legible at rest (primary), orange/red as a limit nears,
+                // orange alert when it needs you (login expired / denied).
                 // Off: muted, inviting a click without implying live data.
                 .foregroundStyle(usage.enabled ? usageTint : Color.secondary)
+                // Dim only for a quiet activity-pause; an alert stays full-strength.
+                .opacity(usage.isPaused && !usage.needsAttention ? 0.5 : 1)
             }
             .buttonStyle(.borderless)
             .help(usage.enabled ? "Plan usage (session & weekly limits)" : "Show plan usage")
@@ -291,7 +294,7 @@ struct UsageView: View {
                         .background(Color.secondary.opacity(0.15), in: Capsule())
                 }
                 Spacer()
-                Button { usage.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                Button { usage.refresh(interactive: true) } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
                     .disabled(usage.isLoading)
                     .help("Refresh")
@@ -345,10 +348,18 @@ struct UsageView: View {
                         }
                     }
                 }
-                if let at = usage.snapshot.fetchedAt {
-                    Text("Updated \(at, style: .relative) ago")
-                        .font(.caption2).foregroundStyle(.tertiary)
+                HStack(spacing: 4) {
+                    // Activity-pause note only; a deny/error is already explained
+                    // by the notice above.
+                    if usage.isPaused, usage.lastError == nil {
+                        Image(systemName: "pause.circle").font(.caption2)
+                        Text("Paused — no recent activity.").font(.caption2)
+                    }
+                    if let at = usage.snapshot.fetchedAt {
+                        Text("Updated \(at, style: .relative) ago").font(.caption2)
+                    }
                 }
+                .foregroundStyle(.tertiary)
             } else if usage.lastError == nil {
                 Text(usage.isLoading ? "Loading…" : "No usage data.")
                     .font(.caption).foregroundStyle(.secondary)
