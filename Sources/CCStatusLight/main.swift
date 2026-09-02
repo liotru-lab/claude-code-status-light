@@ -87,6 +87,38 @@ if arguments.contains("--check-update") {
     exit(finished ? 0 : 1)
 }
 
+// Debug harness: `CCStatusLight --usage` reads the plan-usage bars from
+// /api/oauth/usage (Keychain token → api.anthropic.com) and prints them, so the
+// network + parsing path is verifiable without the GUI. Forces the feature on
+// for this run only (does not touch the persisted preference).
+if arguments.contains("--usage") {
+    UserDefaults.standard.set(true, forKey: UsageStore.enabledKey)
+    let store = MainActor.assumeIsolated { UsageStore() }
+    MainActor.assumeIsolated { store.refresh(interactive: true) }
+    var done = false
+    let deadline = Date().addingTimeInterval(20)
+    while !done && Date() < deadline {
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.15))
+        MainActor.assumeIsolated {
+            if store.isLoading { return }
+            if let e = store.lastError {
+                FileHandle.standardError.write(Data("error: \(e)\n".utf8)); done = true; return
+            }
+            if let at = store.snapshot.fetchedAt {
+                var out = "fetched \(ISO8601DateFormatter().string(from: at))\n"
+                for l in store.snapshot.limits {
+                    out += "  \(l.title): \(l.percent)% [\(l.severity.rawValue)]"
+                    if let r = l.resetsAt { out += " resets \(ISO8601DateFormatter().string(from: r))" }
+                    out += "\n"
+                }
+                FileHandle.standardOutput.write(Data(out.utf8)); done = true
+            }
+        }
+    }
+    UserDefaults.standard.removeObject(forKey: UsageStore.enabledKey)
+    exit(done ? 0 : 1)
+}
+
 // Debug harness: `CCStatusLight --self-update` runs a real in-app update
 // (download → verify → hand off to the swap helper) against this bundle, so the
 // updater can be exercised without clicking through the GUI.

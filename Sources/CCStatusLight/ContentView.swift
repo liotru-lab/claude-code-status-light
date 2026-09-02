@@ -20,6 +20,9 @@ struct ContentView: View {
     @EnvironmentObject var windowState: WindowState
     @EnvironmentObject var updates: UpdateChecker
     @EnvironmentObject var updater: SelfUpdater
+    @EnvironmentObject var usage: UsageStore
+    @State private var showUsage = false
+    @State private var showUsageIntro = false
     @State private var showLegend = false
     @State private var showEnvironment = false
     @State private var expanded: Set<String> = []
@@ -33,6 +36,9 @@ struct ContentView: View {
                     SessionRow(session: session,
                                isExpanded: expandedBinding(session.id),
                                onRefresh: { store.refresh() })
+                        .contextMenu {
+                            Button("Remove from List") { store.remove(session.id) }
+                        }
                 }
                 .listStyle(.inset)
             }
@@ -113,6 +119,18 @@ struct ContentView: View {
         .padding(.vertical, 6)
     }
 
+    /// Footer gauge colour. Resting reads in the primary label colour (not the
+    /// muted secondary), so usage is legible at a glance; colour is reserved for
+    /// something that actually wants attention.
+    private var usageTint: Color {
+        if usage.needsAttention { return .orange }
+        switch usage.worstSeverity {
+        case .warning:  return .orange
+        case .critical: return .red
+        default:        return .primary
+        }
+    }
+
     private func expandedBinding(_ id: String) -> Binding<Bool> {
         Binding(
             get: { expanded.contains(id) },
@@ -166,6 +184,53 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
+            // The gauge is always present. When usage is on it opens the panel;
+            // when off it's a quiet on-switch — a click explains what enabling
+            // does (keychain + network) before anything happens. Turning it back
+            // off lives in Settings.
+            Button {
+                if usage.enabled {
+                    // Opening just shows the last numbers the background timer
+                    // already fetched — no network call, so checking usage often
+                    // never adds to the rate-limit load. The ↻ in the panel is the
+                    // only on-demand refresh. (environment.refresh is a local read
+                    // for the plan label — no network.)
+                    if !showUsage { environment.refresh() }
+                    showUsage.toggle()
+                } else {
+                    showUsageIntro.toggle()
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                    if usage.enabled {
+                        if usage.needsAttention {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                        } else if let p = usage.sessionPercent {
+                            Text("\(p)%").font(.caption2.weight(.medium))
+                        }
+                    }
+                }
+                // On: legible at rest (primary), orange/red as a limit nears,
+                // orange alert when it needs you (login expired / denied).
+                // Off: muted, inviting a click without implying live data.
+                .foregroundStyle(usage.enabled ? usageTint : Color.secondary)
+                // Dim only for a quiet activity-pause; an alert stays full-strength.
+                .opacity(usage.isPaused && !usage.needsAttention ? 0.5 : 1)
+            }
+            .buttonStyle(.borderless)
+            .help(usage.enabled ? "Plan usage (session & weekly limits)" : "Show plan usage")
+            .popover(isPresented: $showUsage, arrowEdge: .bottom) {
+                UsageView(usage: usage, plan: environment.status.planLabel)
+            }
+            .popover(isPresented: $showUsageIntro, arrowEdge: .bottom) {
+                UsageIntroView {
+                    usage.enabled = true
+                    showUsageIntro = false
+                    showUsage = true
+                }
+            }
             Button {
                 if !showEnvironment { environment.refresh() }
                 showEnvironment.toggle()
@@ -190,6 +255,170 @@ struct ContentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+extension UsageLimit.Severity {
+    /// At-a-glance colour: green until it's worth noticing, then amber, then red.
+    var tint: Color {
+        switch self {
+        case .normal, .unknown: return .secondary
+        case .warning:          return .orange
+        case .critical:         return .red
+        }
+    }
+    /// Bar fill (distinct from the icon tint, which stays subtle when normal).
+    var barColor: Color {
+        switch self {
+        case .normal, .unknown: return .accentColor
+        case .warning:          return .orange
+        case .critical:         return .red
+        }
+    }
+}
+
+/// Plan-usage popover: the session and weekly bars from Claude's Settings ▸ Usage.
+struct UsageView: View {
+    @ObservedObject var usage: UsageStore
+    /// The account's plan (Pro / Max 5× / Team …), read locally; nil if unknown.
+    var plan: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Plan usage").font(.headline)
+                if let plan {
+                    Text(plan)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15), in: Capsule())
+                }
+                Spacer()
+                Button { usage.refresh(interactive: true) } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .disabled(usage.isLoading)
+                    .help("Refresh")
+            }
+
+            // A problem shows as a notice on top — it never hides the stored
+            // numbers below, so a rate-limit or a dropped connection still leaves
+            // you looking at the last known usage (with its timestamp).
+            if let err = usage.lastError {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: usage.needsReauth ? "person.badge.key" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange).font(.caption)
+                    // Message in the primary label colour so it's legible on the
+                    // popover grey; orange stays as the icon + banner tint.
+                    Text(err).font(.caption).foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    Button(usage.needsReauth ? "Reconnect" : "Try again") { usage.reconnect() }
+                        .controlSize(.small)
+                        .disabled(usage.isLoading)
+                    Button { usage.dismissError() } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless)
+                        .help("Dismiss")
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.35)))
+            }
+
+            if !usage.snapshot.limits.isEmpty {
+                ForEach(usage.snapshot.limits) { limit in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(limit.title).font(.subheadline)
+                            Spacer()
+                            Text("\(limit.percent)%")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(limit.severity.barColor)
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.secondary.opacity(0.2))
+                                Capsule().fill(limit.severity.barColor)
+                                    .frame(width: geo.size.width * min(1, Double(limit.percent) / 100))
+                            }
+                        }
+                        .frame(height: 6)
+                        if let reset = limit.resetsAt {
+                            Text("Resets \(reset, format: resetFormat(reset))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                HStack(spacing: 4) {
+                    // Activity-pause note only; a deny/error is already explained
+                    // by the notice above.
+                    if usage.isPaused, usage.lastError == nil {
+                        Image(systemName: "pause.circle").font(.caption2)
+                        Text("Paused — no recent activity.").font(.caption2)
+                    }
+                    if let at = usage.snapshot.fetchedAt {
+                        Text("Updated \(at, style: .relative) ago").font(.caption2)
+                    }
+                }
+                .foregroundStyle(.tertiary)
+            } else if usage.lastError == nil {
+                Text(usage.isLoading ? "Loading…" : "No usage data.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(width: 280)
+    }
+
+    /// Show a time-of-day for a same-day reset, else weekday + time.
+    private func resetFormat(_ date: Date) -> Date.FormatStyle {
+        let sameDay = Calendar.current.isDate(date, inSameDayAs: Date())
+        return sameDay
+            ? .dateTime.hour().minute()
+            : .dateTime.weekday(.abbreviated).hour().minute()
+    }
+}
+
+/// Shown when the gauge is tapped while usage is off — an honest heads-up about
+/// what enabling does (keychain read + one network host) before it happens.
+struct UsageIntroView: View {
+    let onEnable: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Plan usage").font(.headline)
+            Text("Show your plan's session and weekly limits in the footer — the same numbers as Claude's Settings ▸ Usage.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Label {
+                    Text("Reads your Claude Code login from the **keychain** — macOS asks the first time (choose *Always Allow*).")
+                } icon: { Image(systemName: "key.fill") }
+                Label {
+                    Text("Fetches usage from **api.anthropic.com** — read-only; nothing about you is sent.")
+                } icon: { Image(systemName: "network") }
+                Label {
+                    Text("Requires being signed in to Claude Code.")
+                } icon: { Image(systemName: "person.crop.circle") }
+            }
+            .font(.caption)
+            .labelStyle(.titleAndIcon)
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Not now") { dismiss() }
+                Button("Enable") { onEnable() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 2)
+
+            Text("You can turn this off again in Settings.")
+                .font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 320)
     }
 }
 

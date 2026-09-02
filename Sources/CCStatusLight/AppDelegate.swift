@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let callbackSettings = CallbackSettings()
     private let updateChecker = UpdateChecker()
     private let selfUpdater = SelfUpdater()
+    private let usageStore = UsageStore()
     private var cancellables = Set<AnyCancellable>()
     private var window: NSWindow?
     private var preferencesWindow: NSWindow?
@@ -65,7 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // session state. Emits on the main actor (SessionStore is @MainActor).
         store.$sessions
             .sink { [weak self] sessions in
-                MainActor.assumeIsolated { self?.callbackEngine.update(sessions) }
+                MainActor.assumeIsolated {
+                    self?.callbackEngine.update(sessions)
+                    // Note engagement for the usage panel: a non-idle live session
+                    // means you're working, so a background Keychain read is
+                    // in-context rather than out of the blue.
+                    let active = sessions.contains { $0.live && $0.state != .idle && $0.state != .ended }
+                    self?.usageStore.noteSessionsActive(active)
+                }
             }
             .store(in: &cancellables)
     }
@@ -94,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .environmentObject(windowState)
             .environmentObject(updateChecker)
             .environmentObject(selfUpdater)
+            .environmentObject(usageStore)
 
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
@@ -118,7 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if preferencesWindow == nil {
             let hosting = NSHostingController(rootView: PreferencesView(settings: callbackSettings,
                                                                         updates: updateChecker,
-                                                                        updater: selfUpdater))
+                                                                        updater: selfUpdater,
+                                                                        usage: usageStore))
             let w = NSWindow(contentViewController: hosting)
             w.title = "Settings"
             w.styleMask = [.titled, .closable]

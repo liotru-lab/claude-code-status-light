@@ -59,6 +59,18 @@ struct PreferencesView: View {
     @ObservedObject var settings: CallbackSettings
     @ObservedObject var updates: UpdateChecker
     @ObservedObject var updater: SelfUpdater
+    @ObservedObject var usage: UsageStore
+    @AppStorage(SessionStore.autoCleanHoursKey) private var staleHours = 24
+    @AppStorage(UsageStore.activityWindowKey) private var activeWindow = 15
+
+    private static func staleLabel(_ h: Int) -> String {
+        switch h {
+        case 0:  return "Never"
+        case 1:  return "1 hour"
+        case 24: return "1 day"
+        default: return "\(h) hours"
+        }
+    }
 
     private static let rows: [(state: String, label: String, color: Color)] = [
         ("notification", "Attention", .red),
@@ -68,48 +80,161 @@ struct PreferencesView: View {
         ("none", "No sessions", .gray),
     ]
 
+    @State private var tab = 0
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 0) {
+            Picker("", selection: $tab) {
+                Text("Callbacks").tag(0)
+                Text("Sessions").tag(1)
+                Text("Usage").tag(2)
+                Text("Updates").tag(3)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            Divider()
+
+            Group {
+                switch tab {
+                case 1:  sessionsTab
+                case 2:  usageTab
+                case 3:  updatesTab
+                default: callbacksTab
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(width: 480, height: 430)
+        .onAppear { settings.reload() }
+    }
+
+    /// Common tab chrome: padded, top-left aligned, fills the fixed window.
+    private func tab<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var callbacksTab: some View {
+        tab {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Run a command when the overall state changes", isOn: $settings.enabled)
+                        .font(.headline)
+                    Text("The most urgent live session drives it — Attention beats Working beats Ready beats Idle. Any shell command works (a busylight, a notification, a sound, a webhook…).")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 8) {
+                    Text("Presets:").font(.caption).foregroundStyle(.secondary)
+                    Menu("Load example…") {
+                        ForEach(CallbackConfig.presets, id: \.name) { preset in
+                            Button(preset.name) { settings.applyPreset(preset.commands) }
+                        }
+                    }
+                    .fixedSize()
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Self.rows, id: \.state) { row in
+                        HStack(spacing: 8) {
+                            Circle().fill(row.color).frame(width: 8, height: 8)
+                            Text(row.label).frame(width: 78, alignment: .leading)
+                            TextField("command", text: settings.command(for: row.state))
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.caption, design: .monospaced))
+                            Button("Test") { settings.test(row.state) }
+                                .disabled((settings.commands[row.state] ?? "").isEmpty)
+                        }
+                    }
+                }
+
+                Text("Placeholders: {state} {color} {count} {name}")
+                    .font(.caption2).foregroundStyle(.tertiary)
+
+                HStack {
+                    Button("Reveal config") { settings.reveal(CallbackEngine.configURL) }
+                    Button("Reveal log") { settings.reveal(CallbackEngine.logURL) }
+                    Spacer()
+                }
+                .controlSize(.small)
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private var sessionsTab: some View {
+        tab {
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("Run a command when the overall state changes", isOn: $settings.enabled)
-                    .font(.headline)
-                Text("The most urgent live session drives it — Attention beats Working beats Ready beats Idle. Any shell command works (a busylight, a notification, a sound, a webhook…).")
+                HStack {
+                    Text("Remove inactive sessions after").font(.headline)
+                    Spacer()
+                    Picker("", selection: $staleHours) {
+                        ForEach(SessionStore.autoCleanChoices, id: \.self) { h in
+                            Text(Self.staleLabel(h)).tag(h)
+                        }
+                    }
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                }
+                Text("Idle sessions quiet for this long drop off the list. Working sessions are never removed, and a hidden one reappears if it becomes active again. Right-click any row to remove it now.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
 
-            HStack(spacing: 8) {
-                Text("Presets:").font(.caption).foregroundStyle(.secondary)
-                Menu("Load example…") {
-                    ForEach(CallbackConfig.presets, id: \.name) { preset in
-                        Button(preset.name) { settings.applyPreset(preset.commands) }
-                    }
-                }
-                .fixedSize()
-            }
-
-            Divider()
-
+    private var usageTab: some View {
+        tab {
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(Self.rows, id: \.state) { row in
-                    HStack(spacing: 8) {
-                        Circle().fill(row.color).frame(width: 8, height: 8)
-                        Text(row.label).frame(width: 78, alignment: .leading)
-                        TextField("command", text: settings.command(for: row.state))
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.caption, design: .monospaced))
-                        Button("Test") { settings.test(row.state) }
-                            .disabled((settings.commands[row.state] ?? "").isEmpty)
+                Toggle("Show plan usage", isOn: $usage.enabled)
+                    .font(.headline)
+                Text("Shows your plan's session and weekly usage bars in the footer — the same numbers as Claude's Settings ▸ Usage. It reads your Claude Code login from the keychain; macOS asks the first time, and choosing “Always Allow” keeps it silent afterwards. The token is read-only and talks only to api.anthropic.com; off by default.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if usage.enabled {
+                    HStack(spacing: 6) {
+                        Text("Refresh every").font(.caption)
+                        Picker("", selection: $usage.intervalMinutes) {
+                            ForEach(UsageStore.intervalChoices, id: \.self) { m in
+                                Text("\(m) min").tag(m)
+                            }
+                        }
+                        .labelsHidden().pickerStyle(.menu).fixedSize()
+                    }
+                    .padding(.top, 2)
+
+                    HStack(spacing: 6) {
+                        Text("Keep live after activity for").font(.caption)
+                        Picker("", selection: $activeWindow) {
+                            ForEach(UsageStore.activityWindowChoices, id: \.self) { m in
+                                Text("\(m) min").tag(m)
+                            }
+                        }
+                        .labelsHidden().pickerStyle(.menu).fixedSize()
+                    }
+                    Text("While a session's been active in this window, the numbers keep refreshing — re-reading your login if it expired, so macOS may ask then. Once your sessions are quiet, refreshing pauses (no out-of-the-blue prompts) until a session is active again or you hit ↻.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let err = usage.lastError {
+                        Text(err).font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
+        }
+    }
 
-            Text("Placeholders: {state} {color} {count} {name}")
-                .font(.caption2).foregroundStyle(.tertiary)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 4) {
+    private var updatesTab: some View {
+        tab {
+            VStack(alignment: .leading, spacing: 8) {
                 Toggle("Check for new versions", isOn: $updates.automatic)
                     .font(.headline)
                 Text("Asks GitHub once a day whether a newer release exists, so you don't sit on a version with a bug that's already fixed. Nothing about you or your sessions is sent, and nothing is downloaded or installed — it only tells you, and points at the release notes.")
@@ -133,27 +258,15 @@ struct PreferencesView: View {
                         Link("Release notes", destination: UpdateChecker.releasesPage)
                             .font(.caption)
                     } else if updates.lastChecked != nil {
-                        Text("Up to date (\(UpdateChecker.currentVersion))")
-                            .font(.caption).foregroundStyle(.secondary)
+                        Text("Up to date").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .controlSize(.small)
-                .padding(.top, 2)
-            }
 
-            Divider()
-
-            HStack {
-                Button("Reveal config") { settings.reveal(CallbackEngine.configURL) }
-                Button("Reveal log") { settings.reveal(CallbackEngine.logURL) }
-                Spacer()
-                Text("v\(UpdateChecker.currentVersion)")
+                Text("CC Status Light v\(UpdateChecker.currentVersion)")
                     .font(.caption2).foregroundStyle(.tertiary)
+                    .padding(.top, 6)
             }
-            .controlSize(.small)
         }
-        .padding(18)
-        .frame(width: 460)
-        .onAppear { settings.reload() }
     }
 }
