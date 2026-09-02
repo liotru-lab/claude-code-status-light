@@ -190,16 +190,22 @@ pick how often it refreshes.)
 This is the **only** feature that reads a credential or makes a network call, so
 it's fenced deliberately:
 
-- It reads your Claude Code login from the **keychain** — so macOS asks your
-  permission the first time ("CC Status Light wants to use *Claude Code-credentials*").
-  Choose **Always Allow** and it stays quiet afterwards.
+- It reads your Claude Code login from the **keychain** — macOS asks your
+  permission ("CC Status Light wants to use *Claude Code-credentials*").
 - The token is **read-only**: the app never refreshes, writes, logs, or stores it,
   and it goes to **`api.anthropic.com` and nowhere else**.
-- Refreshes happen in the background over the network (no repeat keychain access);
-  if you're not signed in, or the login expires, the panel shows a **Reconnect**
-  button rather than nagging you.
 
-Everything else in the app remains local and credential-free.
+**Refreshing is designed not to interrupt you.** While the token is valid,
+background refreshes are silent network calls — no keychain, no prompt. The
+keychain is re-read (which can prompt) only when the token has expired **and** a
+session has been active recently (how recently is adjustable in Settings ▸
+Usage). Otherwise the panel simply **pauses** — *"Paused — no recent activity"*,
+the number dims — until a session is active again or you refresh with **↻**. So
+it won't pop a keychain prompt while you're away from the machine.
+
+If the login expires, or you **decline** the keychain prompt, the gauge shows an
+orange alert and stops asking — **↻** retries when you're ready. Everything else
+in the app remains local and credential-free.
 
 ## Update check
 
