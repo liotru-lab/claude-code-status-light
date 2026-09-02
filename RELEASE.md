@@ -44,15 +44,35 @@ xcrun notarytool store-credentials CCStatusLight \
 (Alternatively an App Store Connect API key — see `xcrun notarytool
 store-credentials --help`.)
 
+## Branching & release flow
+
+- **`develop`** is the integration branch — all work lands here, and local builds
+  are made from it. It carries the day-to-day iteration (bug-fixing, tuning), which
+  never appears verbatim in release notes.
+- **`main`** only ever moves via a **release**: open a PR **`develop → main`**,
+  curate the CHANGELOG entry in that PR (the *net* user-facing changes for the
+  version — not the individual dev commits), merge, then cut the release.
+- **`CHANGELOG.md`** is the single source of truth for release notes. Each version
+  gets one curated section (`## [X.Y.Z] — date`, Added/Changed/Fixed). Keep it to
+  what a user would care about, distilled from the dev churn.
+
 ## Cutting a release
 
 ```sh
-git checkout main            # release from main
-git pull
-./scripts/release.sh v0.1.0  # tag must be vX.Y.Z
+# 1. Curate the CHANGELOG section for the new version on develop.
+# 2. Open + merge the release PR:
+gh pr create --base main --head develop --title "Release vX.Y.Z" --body "…"
+gh pr merge --merge            # (or via the GitHub UI)
+
+# 3. Cut it from main:
+git checkout main && git pull
+./scripts/release.sh vX.Y.Z    # tag must be vX.Y.Z
 ```
 
-The version (`0.1.0`) also becomes the app's `MARKETING_VERSION` via the tag.
+The version (`X.Y.Z`) becomes the app's `MARKETING_VERSION` via the tag, and
+`release.sh` uses that version's **`CHANGELOG.md` section** as the GitHub Release
+notes (with the install line appended). If there's no matching section, it falls
+back to the install note alone and warns.
 
 ### Environment overrides
 

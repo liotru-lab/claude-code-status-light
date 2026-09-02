@@ -130,11 +130,27 @@ switch_back() { [[ -n "${PREV_GH:-}" && "$PREV_GH" != "$GH_USER" ]] && gh auth s
 trap switch_back EXIT
 gh auth switch -u "$GH_USER" >/dev/null 2>&1 || die "couldn't switch gh to '$GH_USER'"
 
+# Release notes = this version's curated CHANGELOG.md section (reflecting what
+# landed in main, not the dev iterations) + the install line as a footer. If the
+# section is missing, the footer alone is used.
+NOTES_FILE="$(mktemp)"
+if [[ -f CHANGELOG.md ]]; then
+  awk -v hdr="## [$VERSION]" '
+    index($0, hdr) == 1 { grab=1; next }
+    grab && /^## \[/    { exit }
+    grab                { print }
+  ' CHANGELOG.md | sed -e '/./,$!d' > "$NOTES_FILE"   # drop leading blank lines
+fi
+[[ -s "$NOTES_FILE" ]] && printf '\n---\n\n' >> "$NOTES_FILE" \
+  || echo "release: no CHANGELOG.md section for $VERSION — using the install note only" >&2
+printf 'Notarized macOS build. Requires macOS 15+. Unzip and move **CCStatusLight.app** to /Applications.\n' >> "$NOTES_FILE"
+
 gh release create "$TAG" "$DIST" \
   --repo "$REPO" \
   --title "$DISPLAY $VERSION" \
   --verify-tag \
-  --notes "Notarized macOS build. Requires macOS 15+. Unzip and move CCStatusLight.app to /Applications."
+  --notes-file "$NOTES_FILE"
+rm -f "$NOTES_FILE"
 
 step "Done"
 echo "Released $TAG → https://github.com/$REPO/releases/tag/$TAG"
