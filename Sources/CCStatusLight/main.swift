@@ -176,6 +176,26 @@ if arguments.contains("--self-update") {
     exit(settled ? 0 : 1)
 }
 
+// Debug harness: `CCStatusLight --sessions` runs the real SessionScanner once and
+// prints each composed session's final state — i.e. with the app-side overlays and
+// staleness nets applied (unlike `--parse`, which is the raw per-transcript parser).
+if arguments.contains("--sessions") {
+    let scanner = SessionScanner(directory: SessionStore.stateDirectory)
+    var done = false
+    scanner.scan { sessions in
+        for s in sessions {
+            let line = "\(String(s.id.prefix(8)))  \(s.state.rawValue)/\(s.activity)  sub\(s.subagentCount)  live=\(s.live)  \(s.displayName)\n"
+            FileHandle.standardOutput.write(Data(line.utf8))
+        }
+        done = true
+    }
+    let deadline = Date().addingTimeInterval(10)
+    while !done && Date() < deadline {
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.1))
+    }
+    exit(done ? 0 : 1)
+}
+
 // Classic AppKit entry point. The app fully owns its NSWindow (created in
 // AppDelegate) so the POC's window rules — closing the window does not quit,
 // dock-click reopens, "Show on all Spaces" — are exact and not fighting a
