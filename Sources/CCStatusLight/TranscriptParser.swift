@@ -76,6 +76,9 @@ final class TranscriptParser {
     init(url: URL) { self.url = url }
 
     var subagentCount: Int { activeAgents.count }
+    /// True while the last-seen transcript state is a context compaction. Compaction
+    /// is bounded, so a stale `isCompacting` means it finished (see SessionScanner).
+    var isCompacting: Bool { state == .compacting }
     var hasStarted: Bool { sawAssistant }
     var nameFromTranscript: String? { customTitle ?? aiTitle ?? slug }
 
@@ -327,7 +330,8 @@ final class TranscriptParser {
             activeAgents.formIntersection(asyncAgents)
             if !activeAgents.isEmpty {
                 state = .active; activity = "subagent"
-            } else if state == .active {
+            } else if state == .active || state == .compacting {
+                compacting = false
                 state = .idle; activity = ""
             }
         default:

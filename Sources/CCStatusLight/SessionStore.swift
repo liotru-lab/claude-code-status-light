@@ -11,6 +11,9 @@ final class SessionScanner {
 
     /// Grace period before a stale (ended / crashed) marker is pruned.
     private static let staleGrace: TimeInterval = 600
+    /// A `compacting` read older than this is treated as finished (idle) — real
+    /// compaction takes seconds, so a quiet one has completed.
+    private static let compactingStale: TimeInterval = 120
 
     init(directory: URL) { self.directory = directory }
 
@@ -75,6 +78,14 @@ final class SessionScanner {
             } else if let p = parser {
                 state = p.sessionState; activity = p.activity
                 subagents = p.subagentCount; live = true
+                // Compaction is bounded (seconds). A session that reads
+                // `compacting` but whose transcript has been silent for a while is
+                // done — otherwise it sticks at working/yellow (a compact at the
+                // end of a transcript with no following turn never settles).
+                if p.isCompacting, let last = p.lastLineTime,
+                   now.timeIntervalSince(last) > Self.compactingStale {
+                    state = .idle; activity = ""
+                }
             } else {
                 state = marker.state ?? .idle; activity = marker.event ?? ""
                 subagents = 0; live = true
