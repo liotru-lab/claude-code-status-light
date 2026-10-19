@@ -4,13 +4,18 @@ All notable changes to CC Status Light. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic-ish versioning](https://semver.org/) (minor = features, patch = fixes).
 
-## [0.6.1] — 2026-10-17
+## [0.6.1] — 2026-10-19
 
 ### Fixed
 - A session that **compacted its context** and then went quiet could stay stuck
   reading **working** (yellow light) indefinitely — the "compacting" state never
   settled when no turn followed. A quiet compaction is now treated as finished
   (idle), and `turn_duration` after a compact settles it too.
+- A session whose last line was an **async-agent completion notice**
+  (`<task-notification>`) could stick reading **"thinking"** after it was actually
+  done — these are delivered as a `user` message with a promptId but aren't
+  prompts, so they're no longer mistaken for one (same family as the `!`-bash and
+  slash-command fix).
 
 ## [0.6.0] — 2026-09-02
 
