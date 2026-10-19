@@ -11,9 +11,11 @@ final class SessionScanner {
 
     /// Grace period before a stale (ended / crashed) marker is pruned.
     private static let staleGrace: TimeInterval = 600
-    /// A `compacting` read older than this is treated as finished (idle) — real
-    /// compaction takes seconds, so a quiet one has completed.
-    private static let compactingStale: TimeInterval = 120
+    /// A `compacting` read older than this is treated as finished (idle). The
+    /// `compact_boundary` line is written when compaction *completes*, so the
+    /// session is already done compacting by the time we see it — this short grace
+    /// only covers the gap before an auto-compact's resume turn starts writing.
+    private static let compactingStale: TimeInterval = 15
 
     init(directory: URL) { self.directory = directory }
 
