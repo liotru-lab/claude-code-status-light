@@ -4,6 +4,15 @@ All notable changes to CC Status Light. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic-ish versioning](https://semver.org/) (minor = features, patch = fixes).
 
+## [0.6.2] — 2026-10-19
+
+### Fixed
+- A session that just **finished compacting** its context could keep reading
+  **compacting** (yellow light) for up to two minutes before settling. The
+  `compact_boundary` marker is written when compaction *completes*, so the session
+  is already done by the time it appears — the grace before it settles to idle is
+  now 15s instead of 120s, while still covering an auto-compact's resume turn.
+
 ## [0.6.1] — 2026-10-19
 
 ### Fixed
