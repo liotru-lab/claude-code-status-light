@@ -304,18 +304,18 @@ final class TranscriptParser {
         }
     }
 
-    /// Terminal-only echoes are logged as `user` messages *with* a promptId, but
-    /// they are not prompts to Claude and no assistant turn follows them: the
-    /// `!`-bash feature (`<bash-input>`/`<bash-stdout>`/`<bash-stderr>`), slash
-    /// commands (`<command-name>`…), and local-command notices
-    /// (`<local-command-…>`). Treated as prompts they strand a session in
-    /// "thinking" forever — and they're exactly the kind of thing that ends up as
-    /// the last line before someone steps away from a terminal.
+    /// Synthetic `user` messages that carry a promptId but are NOT prompts to
+    /// Claude, and have no assistant turn following them — treated as prompts they
+    /// strand a session in "thinking" forever. Covers the `!`-bash feature
+    /// (`<bash-input>`/`<bash-stdout>`/`<bash-stderr>`), slash commands
+    /// (`<command-name>`…), local-command notices (`<local-command-…>`), and
+    /// async-agent completion notices (`<task-notification>`) delivered as a
+    /// dequeued user message after the turn already ended.
     private static func isLocalCommandEcho(_ s: String) -> Bool {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         let markers = ["<bash-input>", "<bash-stdout>", "<bash-stderr>",
                        "<local-command-", "<command-name>", "<command-message>",
-                       "<command-args>", "<command-contents>"]
+                       "<command-args>", "<command-contents>", "<task-notification>"]
         return markers.contains { t.hasPrefix($0) }
     }
 
